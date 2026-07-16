@@ -1,0 +1,48 @@
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies
+Warning: Each child in a list should have a unique "key" prop.
+
+Check the top-level render call using <tr>. See https://reactjs.org/link/warning-keys for more information.
+    at RoiTable
+    at Lazy
+    at main
+    at div
+    at InnerLayoutRouter (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/layout-router.js:239:11)
+    at RedirectErrorBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/redirect-boundary.js:71:9)
+    at RedirectBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/redirect-boundary.js:79:11)
+    at NotFoundErrorBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/not-found-boundary.js:54:9)
+    at NotFoundBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/not-found-boundary.js:62:11)
+    at LoadingBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/layout-router.js:335:11)
+    at ErrorBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/error-boundary.js:109:11)
+    at InnerScrollAndFocusHandler (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/layout-router.js:151:9)
+    at ScrollAndFocusHandler (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/layout-router.js:226:11)
+    at RenderFromTemplateContext (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/render-from-template-context.js:15:44)
+    at Lazy
+    at OuterLayoutRouter (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/layout-router.js:344:11)
+    at Lazy
+    at AuthTimeoutProvider (webpack-internal:///(ssr)/./components/providers/auth-timeout-provider.tsx:24:32)
+    at Lazy
+    at IncognitoProvider (webpack-internal:///(ssr)/./components/providers/incognito-provider.tsx:14:30)
+    at Lazy
+    at AuthProvider (webpack-internal:///(ssr)/./lib/auth-context.tsx:19:25)
+    at Lazy
+    at G (webpack-internal:///(ssr)/./node_modules/next-themes/dist/index.js:1:1056)
+    at B (webpack-internal:///(ssr)/./node_modules/next-themes/dist/index.js:1:970)
+    at ThemeProvider (webpack-internal:///(ssr)/./components/theme-provider.tsx:11:26)
+    at Lazy
+    at body
+    at html
+    at RedirectErrorBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/redirect-boundary.js:71:9)
+    at RedirectBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/redirect-boundary.js:79:11)
+    at ReactDevOverlay (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/react-dev-overlay/internal/ReactDevOverlay.js:66:9)
+    at HotReload (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/react-dev-overlay/hot-reloader-client.js:288:11)
+    at Router (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/app-router.js:154:11)
+    at ErrorBoundaryHandler (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/error-boundary.js:82:9)
+    at ErrorBoundary (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/error-boundary.js:109:11)
+    at AppRouter (webpack-internal:///(ssr)/./node_modules/next/dist/client/components/app-router.js:426:13)
+    at Lazy
+    at Lazy
+    at C:\Users\INEWTON\Downloads\project\node_modules\next\dist\compiled\next-server\app-page.runtime.dev.js:1:545598
+    at C:\Users\INEWTON\Downloads\project\node_modules\next\dist\compiled\next-server\app-page.runtime.dev.js:1:545598
+    at ServerInsertedHTMLProvider (C:\Users\INEWTON\Downloads\project\node_modules\next\dist\compiled\next-server\app-page.runtime.dev.js:1:660093)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies

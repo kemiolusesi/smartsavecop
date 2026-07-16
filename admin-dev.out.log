@@ -1,0 +1,393 @@
+  ▲ Next.js 13.5.1
+  - Local:        http://localhost:3000
+  - Environments: .env.local, .env
+
+ ✓ Ready in 9.7s
+ ○ compiling /middleware ...
+ ✓ Compiled /middleware in 3.3s (110 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ○ compiling /signin/page ...
+ ✓ Compiled /signin/page in 23.2s (1431 modules)
+ ✓ Compiled in 1557ms (724 modules)
+ ○ compiling /admin/page ...
+ ✓ Compiled /admin/page in 6.7s (1552 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 3.1s (1559 modules)
+ ✓ Compiled in 1271ms (749 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled /api/admin/data/route in 1216ms (837 modules)
+ ✓ Compiled in 598ms (837 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled /admin/transactions/page in 1407ms (1574 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled /admin/members/page in 609ms (1576 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 8.9s (1673 modules)
+ ✓ Compiled in 20.2s (1563 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 8.5s (1563 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ○ compiling /dashboard/page ...
+ ✓ Compiled /dashboard/page in 5.4s (1591 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 12.4s (1713 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 14.5s (1603 modules)
+ ✓ Compiled in 978ms (110 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 18.7s (767 modules)
+ ✓ Compiled in 3.8s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 9s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 3.4s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 18.6s (1713 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 1542ms (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 2.4s (1713 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 1204ms (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 3.3s (1603 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 711ms (110 modules)
+ ✓ Compiled in 2.5s (1603 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 2.1s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 2.1s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 2s (767 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ○ compiling /page ...
+ ✓ Compiled /page in 11s (1668 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled /api/calculator/growth/route in 1413ms (906 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 3.7s (1677 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ○ compiling /api/calculator/growth/route ...
+ ✓ Compiled /api/calculator/growth/route in 3s (904 modules)
+ ✓ Compiled in 8.6s (1677 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled /admin/page in 1366ms (885 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ✓ Compiled in 12.4s (110 modules)
+ ✓ Compiled in 4.7s (1677 modules)
+ ○ compiling /_error ...
+ ✓ Compiled /_error in 10.7s (1819 modules)
+   Reload env: .env
+ ✓ Compiled in 4.3s (1929 modules)
+   Reload env: .env
+ ✓ Compiled in 12.3s (1943 modules)
+ ✓ Compiled in 17.6s (1943 modules)

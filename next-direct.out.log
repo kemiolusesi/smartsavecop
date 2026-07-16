@@ -1,0 +1,15 @@
+  ▲ Next.js 13.5.1
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+  - Environments: .env
+
+ ✓ Ready in 7.3s
+ ○ compiling /middleware ...
+ ✓ Compiled /middleware in 3.4s (110 modules)
+[Supabase middleware env] {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://...e.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGci...SfHM'
+}
+ ○ compiling /dashboard/page ...
+ ✓ Compiled /dashboard/page in 36.5s (1532 modules)
+ ✓ Compiled in 4.4s (737 modules)
