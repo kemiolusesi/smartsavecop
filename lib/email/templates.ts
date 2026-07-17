@@ -1,5 +1,3 @@
-import { BANK_DETAILS } from '@/lib/constants/bankDetails';
-
 type EmailValue = string | number | null | undefined;
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://smartsavecoop.vercel.app';
@@ -25,9 +23,11 @@ function formatCurrency(value: EmailValue) {
 
 function ctaButton(label: string, href: string) {
   return `
-    <a href="${escapeHtml(href)}" style="display:inline-block;background:#D4AF37;color:#111111;text-decoration:none;font-weight:800;border-radius:10px;padding:13px 20px;margin-top:12px;">
-      ${escapeHtml(label)}
-    </a>
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${escapeHtml(href)}" style="display:inline-block;background:#D4AF37;color:#111111;text-decoration:none;font-weight:800;border-radius:10px;padding:13px 20px;margin:0 auto;">
+        ${escapeHtml(label)}
+      </a>
+    </div>
   `;
 }
 
@@ -202,11 +202,6 @@ export function accountActivatedEmail({ memberName }: { memberName?: EmailValue 
     `
       <p style="font-size:15px;line-height:1.7;margin:0 0 14px;">Hello ${escapeHtml(memberName || 'Smart Save member')},</p>
       <p style="font-size:15px;line-height:1.7;margin:0 0 18px;">Welcome to Smart Save Cooperative. Your account is now active and you can access your dashboard.</p>
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:18px 0;">
-        ${detailRow('Account Name', BANK_DETAILS.accountName)}
-        ${detailRow('Bank', BANK_DETAILS.bankName)}
-        ${detailRow('Account Number', BANK_DETAILS.accountNumber)}
-      </table>
       ${ctaButton('Log in to Dashboard', 'https://smartsavecoop.vercel.app/signin')}
     `
   );
@@ -272,11 +267,6 @@ export function welcomeEmail({ memberName }: { memberName?: EmailValue }) {
     `
       <p style="font-size:15px;line-height:1.7;margin:0 0 14px;">Hello ${escapeHtml(memberName || 'Smart Save member')},</p>
       <p style="font-size:15px;line-height:1.7;margin:0 0 18px;">Your Smart Save profile has been created. Next, verify your email, complete onboarding, and submit your payment proof for admin review.</p>
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:18px 0;">
-        ${detailRow('Account Name', BANK_DETAILS.accountName)}
-        ${detailRow('Bank', BANK_DETAILS.bankName)}
-        ${detailRow('Account Number', BANK_DETAILS.accountNumber)}
-      </table>
     `
   );
 }

@@ -269,10 +269,10 @@ export default function AdminHistoryClient({
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-5 text-sm font-black text-[#0A0A0A] transition hover:bg-[#F5D06B] sm:col-span-2 lg:col-span-1 lg:self-end"
+              className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[#D4AF37] px-5 text-sm font-semibold text-[#0A0A0A] transition hover:bg-[#F5D06B] sm:col-span-2 lg:col-span-1 lg:self-end"
             >
               <Download size={16} />
-              Download Activity Report (PDF)
+              Download Report (PDF)
             </button>
           </div>
         </div>
