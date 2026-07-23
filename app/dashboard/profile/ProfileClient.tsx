@@ -38,9 +38,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import { generateBackupCodes, hashBackupCode } from '@/utils/mfa';
-import { getAuthErrorMessage } from '@/lib/utils/authError';
 import { useIncognito } from '@/components/providers/incognito-provider';
 import SmartSelect from '@/components/ui/SmartSelect';
+import { parseError } from '@/lib/parseError';
 
 export interface ProfileRecord {
   id?: string | null;
@@ -396,7 +396,7 @@ export default function ProfileClient({
       const profileColumn = editingField === 'phone' ? 'phone_number' : editingField;
       const { error } = await supabase.from('profiles').update({ [profileColumn]: value }).eq('user_id', profile.user_id);
       if (error) {
-        showToast(error.message || 'Unable to save profile');
+        showToast(parseError(error));
         return;
       }
     }
@@ -417,12 +417,17 @@ export default function ProfileClient({
     const account = { bank: bankName, number: accountNumber, name: 'Pending verification' };
 
     if (!devBypassActive && profile.user_id) {
-      await supabase.from('bank_accounts').insert({
+      const { error } = await supabase.from('bank_accounts').insert({
         user_id: profile.user_id,
         bank_name: bankName,
         account_number: accountNumber,
         account_name: account.name,
       });
+
+      if (error) {
+        showToast(parseError(error));
+        return;
+      }
     }
 
     setLinkedAccounts((current) => [account, ...current]);
@@ -490,7 +495,7 @@ export default function ProfileClient({
       setIdCardImage(null);
       showToast('Identity verification submitted for review');
     } catch (error) {
-      setIdentityError(error instanceof Error ? error.message : 'Unable to submit identity verification.');
+      setIdentityError(parseError(error));
     } finally {
       setIdentitySubmitting(false);
     }
@@ -547,7 +552,7 @@ export default function ProfileClient({
     setMfaLoading(false);
 
     if (error) {
-      setSecurityError(getAuthErrorMessage(error));
+      setSecurityError(parseError(error));
       return;
     }
 
@@ -571,7 +576,7 @@ export default function ProfileClient({
 
     if (challengeError) {
       setMfaLoading(false);
-      setSecurityError(getAuthErrorMessage(challengeError));
+      setSecurityError(parseError(challengeError));
       return;
     }
 
@@ -603,7 +608,7 @@ export default function ProfileClient({
     setMfaLoading(false);
 
     if (insertError) {
-      setSecurityError(insertError.message || 'MFA was enabled, but backup codes could not be saved.');
+      setSecurityError(parseError(insertError));
       return;
     }
 
@@ -631,7 +636,7 @@ export default function ProfileClient({
     setMfaLoading(false);
 
     if (error) {
-      showToast(getAuthErrorMessage(error));
+      showToast(parseError(error));
       return;
     }
 
@@ -648,7 +653,7 @@ export default function ProfileClient({
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      setSecurityError(getAuthErrorMessage(error));
+      setSecurityError(parseError(error));
       return;
     }
 
@@ -666,8 +671,22 @@ export default function ProfileClient({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-brand-alabaster px-4 py-6 font-sans text-brand-ink dark:bg-[#0A0A0A] dark:text-white sm:py-8">
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+          }}
+        />
+        <div
+          className="absolute top-[-12%] left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full opacity-[0.24] blur-3xl dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse, rgba(212,175,55,0.78) 0%, rgba(30,144,255,0.4) 48%, rgba(245,240,232,0) 76%)',
+          }}
+        />
+      </div>
       <div className="absolute inset-0 brand-grid opacity-60" aria-hidden="true" />
-      <div className="absolute left-1/2 top-0 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-[#D4AF37]/10 blur-3xl" aria-hidden="true" />
+      <div className="absolute left-1/2 top-0 hidden h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-[#D4AF37]/10 blur-3xl dark:block" aria-hidden="true" />
 
       <section className="relative z-10 mx-auto flex w-full max-w-3xl flex-col gap-8">
         <header className="flex items-center gap-4">
@@ -702,7 +721,7 @@ export default function ProfileClient({
                 <button type="button" onClick={() => copyText(memberId)} className="text-[#D4AF37]">
                   <Copy size={14} />
                 </button>
-                <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-[#D4AF37]">
+                <span className="rounded-full border border-[#D4AF37]/35 bg-[rgba(212,175,55,0.18)] px-2 py-1 text-[#B48924] shadow-[0_3px_10px_rgba(139,109,56,0.08)] dark:border-[#D4AF37]/20 dark:bg-[#D4AF37]/10 dark:text-[#D4AF37] dark:shadow-none">
                   Balance: {balanceText}
                 </span>
               </div>
@@ -871,13 +890,13 @@ export default function ProfileClient({
 
         <section className="pb-10 pt-2">
           {!confirmLogout ? (
-            <button type="button" onClick={() => setConfirmLogout(true)} className="flex w-full items-center gap-3 rounded-2xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-4 text-left text-sm font-black text-[#D4AF37]">
+            <button type="button" onClick={() => setConfirmLogout(true)} className="flex w-full items-center gap-3 rounded-2xl border border-[#D4AF37]/35 bg-[rgba(212,175,55,0.18)] px-4 py-4 text-left text-sm font-black text-[#B48924] shadow-[0_4px_14px_rgba(139,109,56,0.08)] dark:border-[#D4AF37]/20 dark:bg-[#D4AF37]/10 dark:text-[#D4AF37] dark:shadow-none">
               <LogOut size={20} />
               Log Out
             </button>
           ) : (
-            <div className="rounded-2xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 p-4">
-              <p className="text-sm font-black text-[#D4AF37]">Are you sure?</p>
+            <div className="rounded-2xl border border-[#D4AF37]/35 bg-[rgba(212,175,55,0.18)] p-4 shadow-[0_4px_14px_rgba(139,109,56,0.08)] dark:border-[#D4AF37]/20 dark:bg-[#D4AF37]/10 dark:shadow-none">
+              <p className="text-sm font-black text-[#B48924] dark:text-[#D4AF37]">Are you sure?</p>
               <div className="mt-3 flex gap-2">
                 <button type="button" onClick={logout} className="flex-1 rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-black text-[#0A0A0A]">Yes</button>
                 <button type="button" onClick={() => setConfirmLogout(false)} className="flex-1 rounded-xl border border-brand-border px-4 py-2 text-sm font-bold dark:border-white/10">Cancel</button>
@@ -1103,7 +1122,7 @@ function IdentityVerificationModal({
 
           {error && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-400">
-              {typeof error === 'string' ? error : getAuthErrorMessage(error)}
+              {typeof error === 'string' ? error : parseError(error)}
             </div>
           )}
 

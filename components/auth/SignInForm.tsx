@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, MailCheck, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, MailCheck, ShieldCheck, UserRound, X } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import { hashBackupCode } from '@/utils/mfa';
 import { getAuthErrorMessage } from '@/lib/utils/authError';
@@ -453,6 +453,20 @@ export default function SignInForm() {
     <main className="relative min-h-screen overflow-hidden bg-brand-alabaster px-4 py-16 font-sans text-brand-ink dark:bg-[#0A0A0A] dark:text-white sm:py-20">
       <div className="absolute inset-0 brand-grid" aria-hidden="true" />
       <div
+        className="absolute inset-0 dark:hidden"
+        style={{
+          background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+        }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute top-[-12%] left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full opacity-[0.24] blur-3xl dark:hidden"
+        style={{
+          background: 'radial-gradient(ellipse, rgba(212,175,55,0.78) 0%, rgba(30,144,255,0.4) 48%, rgba(245,240,232,0) 76%)',
+        }}
+        aria-hidden="true"
+      />
+      <div
         className="absolute left-1/2 top-0 h-[520px] w-[720px] -translate-x-1/2 rounded-full opacity-[0.035] blur-3xl dark:opacity-[0.08]"
         style={{ background: 'radial-gradient(ellipse, #D4AF37 0%, #0093D8 48%, transparent 72%)' }}
         aria-hidden="true"
@@ -460,39 +474,48 @@ export default function SignInForm() {
 
       <section className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-xl flex-col items-center justify-center gap-10">
         <div className="flex w-full flex-col items-center text-center">
-          <Link href="/" className="inline-flex items-center justify-center gap-3" aria-label="Back to Smart Save home">
-            <img
-              src="/logo.png"
-              alt="Smart Save Cooperative Logo"
-              width={48}
-              height={48}
-              className="h-12 w-auto"
-              style={{ width: '48px', height: '48px', maxWidth: '48px', objectFit: 'contain' }}
-            />
-            <div>
-              <p className="text-sm font-bold leading-none text-brand-ink dark:text-white">Smart Save</p>
-              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-amber dark:text-[#D4AF37]/80">
-                Cooperative
-              </p>
-            </div>
-          </Link>
+          <div className="relative flex w-full items-center justify-center">
+            <Link href="/" className="inline-flex items-center justify-center gap-3" aria-label="Back to Smart Save home">
+              <img
+                src="/logo.png"
+                alt="Smart Save Cooperative Logo"
+                width={48}
+                height={48}
+                className="h-12 w-auto"
+                style={{ width: '48px', height: '48px', maxWidth: '48px', objectFit: 'contain' }}
+              />
+              <div>
+                <p className="text-sm font-bold leading-none text-brand-ink dark:text-white">Smart Save</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-amber dark:text-[#D4AF37]/80">
+                  Cooperative
+                </p>
+              </div>
+            </Link>
+            <Link
+              href="/"
+              aria-label="Cancel sign in and return home"
+              className="absolute right-8 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-transparent text-brand-ink transition hover:text-[#D4AF37] dark:text-white sm:right-2"
+            >
+              <X size={22} />
+            </Link>
+          </div>
 
           <div className="mt-8 flex flex-col items-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-amber/15 bg-[#B48924]/[0.06] px-3.5 py-1.5 text-xs font-medium text-brand-amber dark:border-[#D4AF37]/20 dark:bg-[#D4AF37]/10 dark:text-[#D4AF37]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(196,160,48,0.25)] bg-[rgba(196,160,48,0.10)] px-3.5 py-1.5 text-xs font-medium text-[#8B6914] dark:border-[#D4AF37]/20 dark:bg-[#D4AF37]/10 dark:text-[#D4AF37]">
               <ShieldCheck size={13} />
               Secure member access
             </div>
-            <h1 className="mx-auto my-8 max-w-xl text-center text-4xl font-black leading-tight tracking-normal text-brand-ink dark:text-white sm:my-10 sm:text-5xl">
+            <h1 className="mx-auto my-8 max-w-xl text-center text-4xl font-black leading-tight tracking-normal text-[#1A1410] dark:text-white sm:my-10 sm:text-5xl">
               The Modern Ecosystem for Shared Wealth and Security
             </h1>
-            <p className="mx-auto max-w-md text-center text-sm leading-7 text-zinc-600 dark:text-white/50">
+            <p className="mx-auto max-w-md text-center text-base leading-7 text-[#6B5E4E] dark:text-white/50">
               Create or access your Smart Save profile with email and password. Your dashboard, onboarding progress,
               and unfinished routes stay protected.
             </p>
           </div>
         </div>
 
-        <div className="w-full rounded-2xl border border-brand-border bg-brand-ghost p-5 shadow-2xl shadow-zinc-900/[0.04] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-black/30 sm:p-7">
+        <div className="w-full rounded-2xl border border-[#E0D5C5] bg-[#FFFFFF] p-5 shadow-[0_8px_32px_rgba(139,109,56,0.12)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-black/30 sm:p-7">
           {passwordResetSent ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 text-[#D4AF37]">
@@ -562,7 +585,7 @@ export default function SignInForm() {
                     }}
                     inputMode={mfaMode === 'totp' ? 'numeric' : 'text'}
                     autoComplete="one-time-code"
-                    className="block h-12 w-full appearance-none rounded-xl border border-brand-border bg-brand-ghost px-4 py-3.5 text-center font-mono text-lg font-black tracking-[0.35em] text-brand-ink outline-none transition-all placeholder:text-brand-secondary/45 focus:border-brand-amber focus:ring-2 focus:ring-[#D4AF37]/15 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
+                    className="block h-12 w-full appearance-none rounded-xl border border-[#D4C9B8] bg-[#FDFAF5] px-4 py-3.5 text-center font-mono text-lg font-black tracking-[0.35em] text-[#1A1410] outline-none transition-all placeholder:text-[#A09080] focus:border-[#C4A030] focus:ring-2 focus:ring-[rgba(196,160,48,0.15)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
                     placeholder={mfaMode === 'totp' ? '000000' : 'ABCDEFGH'}
                   />
                 </label>
@@ -591,7 +614,7 @@ export default function SignInForm() {
             </div>
           ) : (
             <>
-          <div className="mb-6 grid w-full grid-cols-2 rounded-xl border border-brand-border bg-zinc-50 p-1 dark:border-white/[0.08] dark:bg-white/[0.04]">
+          <div className="mb-6 grid w-full grid-cols-2 rounded-xl border border-brand-border bg-[#EDE8DF] p-1 dark:border-white/[0.08] dark:bg-white/[0.04]">
             {(['signup', 'login'] as AuthMode[]).map((nextMode) => (
               <button
                 key={nextMode}
@@ -609,8 +632,8 @@ export default function SignInForm() {
                 }}
                 className={`inline-flex items-center justify-center rounded-lg px-3 py-2.5 text-sm font-semibold transition-all ${
                   mode === nextMode
-                    ? 'bg-[#D4AF37] text-brand-ink shadow-sm'
-                    : 'text-zinc-500 hover:text-brand-ink dark:text-white/45 dark:hover:text-white'
+                    ? 'bg-[#C4A030] text-[#FFFFFF] shadow-sm dark:bg-[#D4AF37] dark:text-brand-ink'
+                    : 'bg-[#F0EBE0] text-[#6B5E4E] hover:text-brand-ink dark:bg-transparent dark:text-white/45 dark:hover:text-white'
                 }`}
               >
                 {nextMode === 'signup' ? 'New User' : 'Returning User'}
@@ -668,7 +691,7 @@ export default function SignInForm() {
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
                     autoComplete="name"
-                    className="block h-12 w-full appearance-none rounded-xl border border-brand-border bg-brand-ghost py-3.5 pl-11 pr-4 text-sm font-medium text-brand-ink outline-none transition-all placeholder:text-brand-secondary/45 focus:border-brand-amber focus:ring-2 focus:ring-[#D4AF37]/15 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
+                    className="block h-12 w-full appearance-none rounded-xl border border-[#D4C9B8] bg-[#FDFAF5] py-3.5 pl-11 pr-4 text-sm font-medium text-[#1A1410] outline-none transition-all placeholder:text-[#A09080] focus:border-[#C4A030] focus:ring-2 focus:ring-[rgba(196,160,48,0.15)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
                     placeholder="Your name"
                   />
                 </span>
@@ -687,7 +710,7 @@ export default function SignInForm() {
                   onChange={(event) => setEmail(event.target.value)}
                   autoComplete="email"
                   required
-                  className="block h-12 w-full appearance-none rounded-xl border border-brand-border bg-brand-ghost py-3.5 pl-11 pr-4 text-sm font-medium text-brand-ink outline-none transition-all placeholder:text-brand-secondary/45 focus:border-brand-amber focus:ring-2 focus:ring-[#D4AF37]/15 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
+                  className="block h-12 w-full appearance-none rounded-xl border border-[#D4C9B8] bg-[#FDFAF5] py-3.5 pl-11 pr-4 text-sm font-medium text-[#1A1410] outline-none transition-all placeholder:text-[#A09080] focus:border-[#C4A030] focus:ring-2 focus:ring-[rgba(196,160,48,0.15)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
                   placeholder="you@example.com"
                 />
               </span>
@@ -712,7 +735,7 @@ export default function SignInForm() {
                   autoComplete={isSignup ? 'new-password' : 'current-password'}
                   required
                   minLength={isSignup ? 12 : undefined}
-                  className="block h-12 w-full appearance-none rounded-xl border border-brand-border bg-brand-ghost py-3.5 pl-11 pr-12 text-sm font-medium text-brand-ink outline-none transition-all placeholder:text-brand-secondary/45 focus:border-brand-amber focus:ring-2 focus:ring-[#D4AF37]/15 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
+                  className="block h-12 w-full appearance-none rounded-xl border border-[#D4C9B8] bg-[#FDFAF5] py-3.5 pl-11 pr-12 text-sm font-medium text-[#1A1410] outline-none transition-all placeholder:text-[#A09080] focus:border-[#C4A030] focus:ring-2 focus:ring-[rgba(196,160,48,0.15)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 dark:focus:border-[#D4AF37]/50"
                   placeholder={isSignup ? 'At least 12 characters' : 'Your password'}
                 />
                 <button
@@ -750,9 +773,9 @@ export default function SignInForm() {
                       autoComplete="new-password"
                       required
                       minLength={12}
-                      className={`block h-12 w-full appearance-none rounded-xl border bg-brand-ghost py-3.5 pl-11 pr-12 text-sm font-medium text-brand-ink outline-none transition-all placeholder:text-brand-secondary/45 focus:ring-2 focus:ring-[#D4AF37]/15 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 ${
+                      className={`block h-12 w-full appearance-none rounded-xl border bg-[#FDFAF5] py-3.5 pl-11 pr-12 text-sm font-medium text-[#1A1410] outline-none transition-all placeholder:text-[#A09080] focus:ring-2 focus:ring-[rgba(196,160,48,0.15)] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-white/20 ${
                         confirmPassword.length === 0
-                          ? 'border-brand-border focus:border-brand-amber dark:border-white/[0.08] dark:focus:border-[#D4AF37]/50'
+                          ? 'border-[#D4C9B8] focus:border-[#C4A030] dark:border-white/[0.08] dark:focus:border-[#D4AF37]/50'
                           : passwordsMatch
                             ? 'border-brand-emerald/40 focus:border-brand-emerald dark:border-[#9DC03A]/50'
                             : 'border-red-500/40 focus:border-red-500 dark:border-red-400/50'

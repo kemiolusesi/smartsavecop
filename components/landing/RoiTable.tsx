@@ -1,201 +1,166 @@
 'use client';
 
-import { Fragment } from 'react';
-import { TrendingUp, ChevronRight } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
+import {
+  FIXED_INVESTMENT_TIERS,
+  FIXED_PAYOUT_INTERVAL_MONTHS,
+  SAVINGS_DURATION_MONTHS,
+  SAVINGS_PAYOUT_MONTH,
+  calculateFixedQuarterlyInterest,
+  calculateSavingsPayout,
+  calculateSavingsTotalContributed,
+} from '@/lib/investment-config';
 
-const MEMBERSHIP_FEE = 5000;
+const FIXED_EXAMPLES = [500000, 1100000];
+const SAVINGS_EXAMPLE_MONTHLY = 50000;
 
-const TIERS = [
-  { principal: 500_000, label: '₦500K', tier: 'Starter' },
-  { principal: 1_000_000, label: '₦1M', tier: 'Silver' },
-  { principal: 2_500_000, label: '₦2.5M', tier: 'Gold' },
-  { principal: 5_000_000, label: '₦5M+', tier: 'Platinum' },
-];
-
-const PLANS = [
-  { key: 'standard', label: 'Standard', months: 6, annualRate: 0.07, color: '#1E90FF' },
-  { key: 'growth', label: 'Growth', months: 12, annualRate: 0.15, color: '#8BC34A' },
-];
-
-function calcPayout(principal: number, annualRate: number, months: number) {
-  const rate = annualRate * (months / 12);
-  const interest = principal * rate;
-  return { interest, payout: principal + interest };
+function formatNGN(value: number) {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-function fmt(v: number) {
-  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(2)}M`;
-  if (v >= 1_000) return `₦${(v / 1_000).toFixed(0)}K`;
-  return `₦${v.toLocaleString()}`;
+function formatPercent(rate: number) {
+  return `${(rate * 100).toFixed(1).replace('.0', '')}%`;
 }
 
 export default function RoiTable() {
+  const savingsTotal = calculateSavingsTotalContributed(SAVINGS_EXAMPLE_MONTHLY);
+  const savingsPayout = calculateSavingsPayout(SAVINGS_EXAMPLE_MONTHLY);
+
   return (
-    <section id="projected-earnings" className="relative py-24 px-4 bg-brand-alabaster text-brand-ink dark:bg-[#0A0A0A] dark:text-white">
+    <section id="projected-earnings" className="relative bg-brand-alabaster px-4 py-24 text-brand-ink dark:bg-[#0A0A0A] dark:text-white">
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <div
-          className="absolute top-0 right-0 w-[600px] h-[500px] rounded-full opacity-[0.018] dark:opacity-[0.04]"
+          className="absolute right-0 top-0 h-[500px] w-[600px] rounded-full opacity-[0.018] dark:opacity-[0.04]"
           style={{ background: 'radial-gradient(ellipse, #8BC34A 0%, transparent 70%)' }}
         />
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto">
-        <div className="text-center mb-14">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-emerald/10 bg-brand-mint text-xs font-medium text-brand-emerald mb-5 dark:border-[#8BC34A]/20 dark:bg-[#8BC34A]/5 dark:text-[#8BC34A]">
+      <div className="relative z-10 mx-auto max-w-6xl">
+        <div className="mb-14 text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-emerald/10 bg-brand-mint px-4 py-1.5 text-xs font-medium text-brand-emerald dark:border-[#8BC34A]/20 dark:bg-[#8BC34A]/5 dark:text-[#8BC34A]">
             <TrendingUp size={12} />
             Projected Earnings
           </div>
-          <h2 className="text-3xl sm:text-4xl font-bold text-brand-ink tracking-tight mb-4 dark:text-white">
+          <h2 className="mb-4 text-3xl font-bold tracking-tight text-brand-ink dark:text-white sm:text-4xl">
             See Your Money Grow
           </h2>
-          <p className="text-zinc-600 text-base max-w-xl mx-auto dark:text-white/40">
-            One-time investment projections across our savings tiers. All figures include your principal.
+          <p className="mx-auto max-w-xl text-base text-zinc-600 dark:text-white/40">
+            Compare one-time fixed investments with monthly savings payouts using the current Smart Save plan structure.
           </p>
         </div>
 
-        <div className="hidden sm:block rounded-2xl border border-brand-border bg-brand-ghost overflow-hidden dark:border-white/[0.08] dark:bg-white/[0.02]">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-brand-border dark:border-white/[0.08]">
-                <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-500 uppercase tracking-widest w-[28%] dark:text-white/40">
-                  Investment Tier
-                </th>
-                {PLANS.map((p) => (
-                  <th key={p.key} colSpan={2} className="px-4 py-4 text-center">
-                    <div className="inline-flex flex-col items-center gap-1">
-                      <span
-                        className="text-xs font-bold px-3 py-1 rounded-full"
-                        style={{
-                          background: p.key === 'growth' ? 'rgba(139,195,74,0.08)' : 'rgba(30,144,255,0.08)',
-                          color: p.color,
-                        }}
-                      >
-                        {p.label} Plan — {p.months} Months
-                      </span>
-                      <span className="text-xs text-zinc-500 dark:text-white/30">{p.annualRate * 100}% annual rate</span>
-                    </div>
-                  </th>
-                ))}
-                <th className="px-6 py-4 text-right text-xs font-semibold text-zinc-500 uppercase tracking-widest dark:text-white/40">
-                  Action
-                </th>
-              </tr>
-              <tr className="border-b border-brand-border bg-zinc-50 dark:border-white/[0.05] dark:bg-white/[0.01]">
-                <th className="px-6 py-2.5 text-left text-[11px] text-zinc-400 dark:text-white/20">Principal + Fee</th>
-                {PLANS.map((p) => (
-                  <Fragment key={`${p.key}-headers`}>
-                    <th key={`${p.key}-i`} className="px-4 py-2.5 text-center text-[11px] text-zinc-400 dark:text-white/20">
-                      Interest
-                    </th>
-                    <th key={`${p.key}-p`} className="px-4 py-2.5 text-center text-[11px] text-zinc-400 dark:text-white/20">
-                      Total Payout
-                    </th>
-                  </Fragment>
-                ))}
-                <th className="px-6 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {TIERS.map((tier, idx) => {
-                const isHighlighted = tier.label === '₦1M';
-                return (
-                  <tr
-                    key={tier.label}
-                    className={`border-b border-zinc-100 transition-colors group hover:bg-zinc-50 dark:border-white/[0.05] dark:hover:bg-white/[0.03] ${
-                      isHighlighted ? 'bg-[#B48924]/[0.04] dark:bg-[#D4AF37]/[0.03]' : ''
-                    }`}
-                  >
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
-                          style={{
-                            background: isHighlighted ? 'rgba(180,137,36,0.08)' : 'rgba(24,24,27,0.04)',
-                            color: isHighlighted ? '#B48924' : 'rgba(24,24,27,0.55)',
-                          }}
-                        >
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <p className="text-brand-ink font-semibold text-sm dark:text-white">{tier.label}</p>
-                          <p className="text-zinc-500 text-xs dark:text-white/30">{tier.tier} Tier</p>
-                        </div>
-                        {isHighlighted && (
-                          <span className="text-[10px] bg-[#B48924]/10 text-brand-amber px-2 py-0.5 rounded-full font-semibold ml-1 dark:bg-[#D4AF37]/20 dark:text-[#D4AF37]">
-                            Popular
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {PLANS.map((p) => {
-                      const { interest, payout } = calcPayout(tier.principal, p.annualRate, p.months);
-                      return (
-                        <Fragment key={`${tier.label}-${p.key}`}>
-                          <td key={`${tier.label}-${p.key}-i`} className="px-4 py-5 text-center">
-                            <span className="text-sm font-medium" style={{ color: p.color }}>
-                              +{fmt(interest)}
-                            </span>
-                          </td>
-                          <td key={`${tier.label}-${p.key}-p`} className="px-4 py-5 text-center">
-                            <span className="text-sm font-bold text-brand-ink dark:text-white">{fmt(payout)}</span>
-                          </td>
-                        </Fragment>
-                      );
-                    })}
-                    <td className="px-6 py-5 text-right">
-                      <button className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-brand-amber transition-colors group-hover:text-brand-amber dark:text-white/30 dark:hover:text-[#D4AF37] dark:group-hover:text-[#D4AF37]/70">
-                        Start <ChevronRight size={12} />
-                      </button>
-                    </td>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <article className="rounded-2xl border border-brand-border bg-brand-ghost p-5 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/[0.08] dark:bg-white/[0.02] dark:shadow-none">
+            <div className="mb-5">
+              <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Plan A</p>
+              <h3 className="mt-1 text-2xl font-black">Fixed Investment</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-white/45">
+                One-time capital placement. Interest accumulates and is paid every {FIXED_PAYOUT_INTERVAL_MONTHS} months.
+              </p>
+            </div>
+
+            <div className="hidden md:block">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-brand-border text-xs uppercase tracking-widest text-zinc-500 dark:border-white/[0.08] dark:text-white/35">
+                  <tr>
+                    <th className="px-3 py-3">Tier</th>
+                    <th className="px-3 py-3">Amount Range</th>
+                    <th className="px-3 py-3">Monthly Rate</th>
+                    <th className="px-3 py-3">Quarterly Interest</th>
+                    <th className="px-3 py-3">Payout Interval</th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border dark:divide-white/[0.07]">
+                  {FIXED_INVESTMENT_TIERS.map((tier, index) => {
+                    const exampleAmount = FIXED_EXAMPLES[index];
+                    return (
+                      <tr key={tier.name}>
+                        <td className="px-3 py-4 font-black text-brand-ink dark:text-white">{tier.name}</td>
+                        <td className="px-3 py-4 text-zinc-600 dark:text-white/50">
+                          {formatNGN(tier.min)} - {formatNGN(tier.max)}
+                        </td>
+                        <td className="px-3 py-4 font-bold text-[#8BC34A]">{formatPercent(tier.monthlyRate)} per month</td>
+                        <td className="px-3 py-4 font-bold text-[#D4AF37]">
+                          {formatNGN(calculateFixedQuarterlyInterest(exampleAmount))}
+                          <span className="block text-xs font-medium text-zinc-500 dark:text-white/35">Example: {formatNGN(exampleAmount)}</span>
+                        </td>
+                        <td className="px-3 py-4 text-zinc-600 dark:text-white/50">Quarterly</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-3 md:hidden">
+              {FIXED_INVESTMENT_TIERS.map((tier, index) => {
+                const exampleAmount = FIXED_EXAMPLES[index];
+                return (
+                  <div key={tier.name} className="rounded-xl border border-brand-border bg-brand-ghost p-4 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black text-brand-ink dark:text-white">{tier.name}</p>
+                        <p className="mt-1 text-xs font-semibold text-zinc-500 dark:text-white/40">
+                          {formatNGN(tier.min)} - {formatNGN(tier.max)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-right text-sm font-black text-[#8BC34A]">{formatPercent(tier.monthlyRate)}</p>
+                    </div>
+                    <div className="mt-4 grid gap-2 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-zinc-500 dark:text-white/40">Quarterly Interest</span>
+                        <strong className="text-right text-[#D4AF37]">{formatNGN(calculateFixedQuarterlyInterest(exampleAmount))}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-zinc-500 dark:text-white/40">Example Amount</span>
+                        <strong className="text-right text-brand-ink dark:text-white">{formatNGN(exampleAmount)}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-zinc-500 dark:text-white/40">Payout Interval</span>
+                        <strong className="text-right text-brand-ink dark:text-white">Quarterly</strong>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-zinc-50 dark:bg-white/[0.02]">
-                <td colSpan={7} className="px-6 py-3 text-xs text-zinc-400 dark:text-white/20">
-                  * All projections are pre-tax. A one-time membership fee of ₦5,000 applies. Returns are not guaranteed and subject to cooperative performance.
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+            </div>
 
-        <div className="sm:hidden space-y-4">
-          {TIERS.map((tier) => (
-            <div
-              key={tier.label}
-              className="rounded-2xl border border-brand-border bg-brand-ghost p-5 dark:border-white/[0.08] dark:bg-white/[0.03]"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-brand-ink font-bold text-lg dark:text-white">{tier.label}</p>
-                  <p className="text-zinc-500 text-xs dark:text-white/30">{tier.tier} Tier</p>
+            <p className="mt-4 rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-3 text-xs font-semibold leading-5 text-zinc-600 dark:text-white/55">
+              Capital is returned in full at the end of the agreed term. There are no monthly interest payments.
+            </p>
+          </article>
+
+          <article className="rounded-2xl border border-brand-border bg-brand-ghost p-5 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/[0.08] dark:bg-white/[0.02] dark:shadow-none">
+            <div className="mb-5">
+              <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Plan B</p>
+              <h3 className="mt-1 text-2xl font-black">Monthly Savings</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-white/45">
+                Contribute a fixed amount every month for {SAVINGS_DURATION_MONTHS} consecutive months and receive one payout at month {SAVINGS_PAYOUT_MONTH}.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-brand-border bg-brand-ghost p-5 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-none">
+              <p className="text-xs font-black uppercase tracking-widest text-zinc-500 dark:text-white/35">Example</p>
+              <div className="mt-4 grid gap-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-border bg-brand-ghost p-4 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
+                  <span className="text-sm font-semibold text-zinc-600 dark:text-white/50">Monthly contribution</span>
+                  <strong className="text-brand-ink dark:text-white">{formatNGN(SAVINGS_EXAMPLE_MONTHLY)}</strong>
                 </div>
-                <p className="text-zinc-500 text-xs dark:text-white/30">+₦{(5000).toLocaleString()} fee</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {PLANS.map((p) => {
-                  const { interest, payout } = calcPayout(tier.principal, p.annualRate, p.months);
-                  return (
-                    <div
-                      key={p.key}
-                      className="rounded-xl p-3 border"
-                      style={{ borderColor: `${p.color}25`, background: `${p.color}08` }}
-                    >
-                      <p className="text-xs font-semibold mb-1" style={{ color: p.color }}>
-                        {p.label} ({p.months}mo)
-                      </p>
-                      <p className="text-brand-ink font-bold text-base dark:text-white">{fmt(payout)}</p>
-                      <p className="text-xs mt-0.5" style={{ color: `${p.color}99` }}>
-                        +{fmt(interest)} interest
-                      </p>
-                    </div>
-                  );
-                })}
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-border bg-brand-ghost p-4 shadow-[0_2px_8px_rgba(139,109,56,0.08)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
+                  <span className="text-sm font-semibold text-zinc-600 dark:text-white/50">Total after {SAVINGS_DURATION_MONTHS} months</span>
+                  <strong className="text-brand-ink dark:text-white">{formatNGN(savingsTotal)}</strong>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4">
+                  <span className="text-sm font-semibold text-zinc-600 dark:text-white/60">Payout at month {SAVINGS_PAYOUT_MONTH}</span>
+                  <strong className="text-lg text-[#D4AF37]">{formatNGN(savingsPayout)}</strong>
+                </div>
               </div>
             </div>
-          ))}
+          </article>
         </div>
       </div>
     </section>

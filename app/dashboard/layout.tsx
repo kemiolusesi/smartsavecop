@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createCookieSupabaseClient } from '@/lib/server-supabase';
+import OfflineBanner from './OfflineBanner';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -47,5 +48,10 @@ export default async function DashboardLayout({
     redirect('/pending-activation');
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <OfflineBanner />
+      {children}
+    </>
+  );
 }

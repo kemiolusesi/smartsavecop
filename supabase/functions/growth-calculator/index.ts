@@ -1,5 +1,4 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,13 +36,12 @@ interface MonthlyBreakdown {
 
 function calculateSimpleInterest(
   principal: number,
-  annualRate: number,
+  monthlyRate: number,
   months: number
 ): GrowthResult {
-  const monthlyRate = annualRate / 12;
   const totalInterest = principal * monthlyRate * months;
   const finalAmount = principal + totalInterest;
-  const monthlyReturn = totalInterest / months;
+  const monthlyReturn = principal * monthlyRate;
 
   const breakdown: MonthlyBreakdown[] = [];
   let cumulativeInterest = 0;
@@ -62,34 +60,23 @@ function calculateSimpleInterest(
 
   return {
     principal,
-    rate: annualRate,
+    rate: monthlyRate,
     months,
     type: 'simple',
     total_interest: totalInterest,
     final_amount: finalAmount,
     monthly_return: monthlyReturn,
-    effective_annual_rate: annualRate,
+    effective_annual_rate: monthlyRate,
     breakdown,
   };
 }
 
 function calculateCompoundInterest(
   principal: number,
-  annualRate: number,
+  monthlyRate: number,
   months: number,
   frequency: 'monthly' | 'annually' = 'monthly'
 ): GrowthResult {
-  const compoundingPeriodsPerYear = frequency === 'monthly' ? 12 : 1;
-  const n = compoundingPeriodsPerYear;
-  const t = months / 12;
-  const r = annualRate;
-
-  const finalAmount = principal * Math.pow(1 + r / n, n * t);
-  const totalInterest = finalAmount - principal;
-  const monthlyReturn = totalInterest / months;
-
-  const effectiveAnnualRate = Math.pow(1 + r / n, n) - 1;
-
   const breakdown: MonthlyBreakdown[] = [];
   let cumulativeInterest = 0;
   let currentBalance = principal;
@@ -98,14 +85,11 @@ function calculateCompoundInterest(
     let interestThisMonth = 0;
 
     if (frequency === 'monthly') {
-      const monthlyRate = annualRate / 12;
       interestThisMonth = currentBalance * monthlyRate;
       currentBalance += interestThisMonth;
-    } else {
-      if (month % 12 === 0) {
-        interestThisMonth = currentBalance * annualRate;
-        currentBalance += interestThisMonth;
-      }
+    } else if (month % 12 === 0) {
+      interestThisMonth = currentBalance * monthlyRate * 12;
+      currentBalance += interestThisMonth;
     }
 
     cumulativeInterest += interestThisMonth;
@@ -119,15 +103,17 @@ function calculateCompoundInterest(
     });
   }
 
+  const totalInterest = currentBalance - principal;
+
   return {
     principal,
-    rate: annualRate,
+    rate: monthlyRate,
     months,
     type: 'compound',
     total_interest: totalInterest,
-    final_amount: finalAmount,
-    monthly_return: monthlyReturn,
-    effective_annual_rate: effectiveAnnualRate,
+    final_amount: currentBalance,
+    monthly_return: totalInterest / months,
+    effective_annual_rate: monthlyRate,
     breakdown,
   };
 }

@@ -19,18 +19,17 @@ function localGrowthCalculation({
   frequency?: unknown;
 }) {
   const principalAmount = parseNumber(principal);
-  const annualRate = parseNumber(rate);
+  const monthlyRate = parseNumber(rate);
   const termMonths = parseNumber(months);
   const calculationType = typeof type === 'string' ? type : 'simple';
   const payoutFrequency = typeof frequency === 'string' ? frequency : 'monthly';
 
-  if (principalAmount <= 0 || annualRate <= 0 || termMonths <= 0) {
+  if (principalAmount <= 0 || monthlyRate <= 0 || termMonths <= 0) {
     throw new Error('Principal, rate, and months must be greater than zero.');
   }
 
   let runningBalance = principalAmount;
   let cumulativeInterest = 0;
-  const monthlyRate = annualRate / 12;
 
   const breakdown = Array.from({ length: termMonths }, (_, index) => {
     const month = index + 1;
@@ -58,11 +57,11 @@ function localGrowthCalculation({
   const totalInterest =
     calculationType === 'compound'
       ? runningBalance - principalAmount
-      : principalAmount * annualRate * (termMonths / 12);
+      : principalAmount * monthlyRate * termMonths;
 
   return {
     principal: principalAmount,
-    rate: annualRate,
+    rate: monthlyRate,
     months: termMonths,
     type: calculationType,
     frequency: payoutFrequency,

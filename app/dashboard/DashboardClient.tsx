@@ -20,7 +20,6 @@ import {
   Loader2,
   LogOut,
   Moon,
-  ShoppingBag,
   Sun,
   TrendingUp,
   UserRound,
@@ -30,12 +29,30 @@ import {
 import { supabase } from '@/utils/supabase/client';
 import { useIncognito } from '@/components/providers/incognito-provider';
 import FaqChatWidget from '@/components/shared/FaqChatWidget';
-import { toErrorMessage, toOptionalErrorMessage } from '@/lib/error-message';
+import { toOptionalErrorMessage } from '@/lib/error-message';
+import { parseError } from '@/lib/parseError';
 import { BANK_DETAILS } from '@/lib/constants/bankDetails';
+import {
+  FIXED_PAYOUT_INTERVAL_MONTHS,
+  FIXED_TIER_1_MAX,
+  FIXED_TIER_1_MIN,
+  FIXED_TIER_1_MONTHLY_RATE,
+  FIXED_TIER_2_MAX,
+  FIXED_TIER_2_MIN,
+  FIXED_TIER_2_MONTHLY_RATE,
+  SAVINGS_DURATION_MONTHS,
+  SAVINGS_PAYOUT_MONTH,
+  SAVINGS_RETURN_RATE,
+  calculateFixedQuarterlyInterest,
+  calculateFixedTotalInterest,
+  calculateFixedTotalPayout,
+  calculateSavingsPayout,
+  calculateSavingsTotalContributed,
+  getFixedInvestmentTier,
+} from '@/lib/investment-config';
 
 type ModalType = 'deposit' | 'withdraw' | null;
-type RoiProductType = 'Savings Plan' | 'Fixed Deposit';
-type SavingsPlanType = 'Standard Plan' | 'Growth Plan';
+type RoiProductType = 'Fixed Investment' | 'Monthly Savings';
 type FixedDepositDuration = 6 | 12;
 type TransactionType = 'deposit' | 'withdrawal' | 'fee' | 'interest' | 'interest_accrual';
 type TransactionStatus = 'approved' | 'success' | 'pending' | 'processing' | 'failed';
@@ -107,6 +124,24 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatCompactCurrency(value: number) {
+  if (value >= 1000000) {
+    const compact = value / 1000000;
+    return `₦${Number.isInteger(compact) ? compact.toFixed(0) : compact.toFixed(1)}M`;
+  }
+
+  if (value >= 1000) {
+    const compact = value / 1000;
+    return `₦${Number.isInteger(compact) ? compact.toFixed(0) : compact.toFixed(1)}k`;
+  }
+
+  return formatCurrency(value).replace('.00', '');
+}
+
+function formatRatePercent(rate: number) {
+  return `${(rate * 100).toFixed(1).replace('.0', '')}%`;
 }
 
 function getAmountFontSize(amount: number): string {
@@ -195,7 +230,7 @@ function createPreviewProfile(balance = 0): ProfileRow {
 }
 
 function getErrorMessage(error: unknown) {
-  return toErrorMessage(error, 'Something went wrong. Please try again.');
+  return parseError(error);
 }
 
 function normalizeStatus(status: string): TransactionStatus {
@@ -234,13 +269,6 @@ function filterStatementTransactions(transactions: TransactionRow[], fromDate: s
   });
 }
 
-function fixedDepositRate(amount: number) {
-  if (amount <= 100000) return 0.01;
-  if (amount <= 500000) return 0.012;
-  if (amount <= 1000000) return 0.015;
-  return 0.02;
-}
-
 function RoiCalculatorModal({
   onClose,
   onDepositNow,
@@ -248,43 +276,33 @@ function RoiCalculatorModal({
   onClose: () => void;
   onDepositNow: (amount: number) => void;
 }) {
-  const [productType, setProductType] = useState<RoiProductType>('Savings Plan');
-  const [savingsPlan, setSavingsPlan] = useState<SavingsPlanType>('Growth Plan');
+  const [productType, setProductType] = useState<RoiProductType>('Fixed Investment');
   const [duration, setDuration] = useState<FixedDepositDuration>(12);
   const [amount, setAmount] = useState('500000');
   const principal = parseAmountInput(amount);
-  const savingsMonths = savingsPlan === 'Standard Plan' ? 6 : 12;
-  const savingsAnnualRate = savingsPlan === 'Standard Plan' ? 0.07 : 0.15;
-  const activeMonths = productType === 'Savings Plan' ? savingsMonths : duration;
-  const monthlyRate = productType === 'Savings Plan' ? savingsAnnualRate / 12 : fixedDepositRate(principal);
-  const interest = principal * monthlyRate * activeMonths;
-  const payoutCadence = productType === 'Fixed Deposit' && principal > 500000 ? 'Quarterly return' : 'Monthly return';
-  const periodicReturn =
-    productType === 'Fixed Deposit' && principal > 500000 ? principal * monthlyRate * 3 : principal * monthlyRate;
-  const totalPayout = principal + interest;
-  const quickAmounts = [50000, 100000, 500000, 1000000];
-  const fixedDepositTier =
-    principal <= 100000
-      ? 'Tier: ₦50K-₦100K | 1% monthly'
-      : principal <= 500000
-        ? 'Tier: ₦101K-₦500K | 1.2% monthly'
-        : principal <= 1000000
-          ? 'Tier: ₦500K-₦1M | 1.5% monthly, paid quarterly'
-          : 'Tier: ₦1.1M-₦5M | 2% monthly, paid quarterly';
+  const fixedTier = getFixedInvestmentTier(principal);
+  const savingsTotalContributed = calculateSavingsTotalContributed(principal);
+  const savingsPayout = calculateSavingsPayout(principal);
+  const interest = productType === 'Monthly Savings' ? savingsPayout - savingsTotalContributed : calculateFixedTotalInterest(principal, duration);
+  const totalPayout = productType === 'Monthly Savings' ? savingsPayout : calculateFixedTotalPayout(principal, duration);
+  const quarterlyInterest = calculateFixedQuarterlyInterest(principal);
+  const quickAmounts = productType === 'Monthly Savings' ? [50000, 100000, 250000, 500000] : [500000, 1100000, 2500000, 5000000];
+  const fixedDepositTier = fixedTier
+    ? `${fixedTier.name}: ${formatCurrency(fixedTier.min).replace('.00', '')} - ${formatCurrency(fixedTier.max).replace('.00', '')} | ${(fixedTier.monthlyRate * 100).toFixed(1).replace('.0', '')}% monthly, paid quarterly`
+    : `Minimum investment: ${formatCurrency(FIXED_TIER_1_MIN).replace('.00', '')}`;
   const savingsConditions = [
-    'Standard Plan: 6-month term, 7% per annum',
-    'Growth Plan: 12-month term, 15% per annum',
-    'One-time membership fee of ₦5,000 applies (waived if already a registered member)',
-    'Returns paid in full at end of selected term',
+    `Contribute a fixed amount every month for ${SAVINGS_DURATION_MONTHS} consecutive months`,
+    `Total payout at month ${SAVINGS_PAYOUT_MONTH} equals total contributed plus ${(SAVINGS_RETURN_RATE * 100).toFixed(0)}%`,
+    'Single payout only - no mid-term payments',
     'Early withdrawal may affect eligible returns',
   ];
   const fixedDepositConditions = [
-    'Minimum investment: ₦50,000',
-    'Returns: 1%-2% monthly depending on amount invested',
-    'Tiers ₦500K and above: interest paid quarterly',
-    'Tiers below ₦500K: interest paid monthly',
-    'Capital returned in full at end of agreed tenure',
-    'Available to members and non-members upon registration',
+    `Invest a lump sum between ${formatCurrency(FIXED_TIER_1_MIN).replace('.00', '')} and ${formatCurrency(FIXED_TIER_2_MAX).replace('.00', '')}`,
+    `Tier 1 (${formatCompactCurrency(FIXED_TIER_1_MIN)}-${formatCompactCurrency(FIXED_TIER_1_MAX)}): ${formatRatePercent(FIXED_TIER_1_MONTHLY_RATE)} monthly interest, paid quarterly`,
+    `Tier 2 (${formatCompactCurrency(FIXED_TIER_2_MIN)}-${formatCompactCurrency(FIXED_TIER_2_MAX)}): ${formatRatePercent(FIXED_TIER_2_MONTHLY_RATE)} monthly interest, paid quarterly`,
+    'Capital returned in full at end of agreed term',
+    'No monthly interest payments - interest is accumulated and paid quarterly',
+    'Available to members upon registration',
   ];
 
   function handleDepositNow() {
@@ -312,7 +330,7 @@ function RoiCalculatorModal({
         <div className="space-y-6 p-6">
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2 rounded-xl border border-brand-border bg-zinc-50 p-1 dark:border-white/10 dark:bg-white/[0.04]">
-              {(['Savings Plan', 'Fixed Deposit'] as RoiProductType[]).map((type) => (
+              {(['Fixed Investment', 'Monthly Savings'] as RoiProductType[]).map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -326,35 +344,21 @@ function RoiCalculatorModal({
               ))}
             </div>
             <p className="text-xs font-medium leading-5 text-zinc-500 dark:text-white/45">
-              Savings Plan: Fixed Standard or Growth term. Fixed Deposit: Tiered returns based on your amount.
+              Fixed Investment uses automatic tier detection. Monthly Savings uses a fixed {SAVINGS_DURATION_MONTHS}-month contribution period.
             </p>
           </div>
 
-          {productType === 'Savings Plan' ? (
-            <div className="grid grid-cols-2 gap-3">
-              {(['Standard Plan', 'Growth Plan'] as SavingsPlanType[]).map((plan) => (
-                <button
-                  key={plan}
-                  type="button"
-                  onClick={() => setSavingsPlan(plan)}
-                  className={`rounded-xl border px-3 py-3 text-left transition ${
-                    savingsPlan === plan
-                      ? 'border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37]'
-                      : 'border-brand-border bg-zinc-50 text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/55'
-                  }`}
-                >
-                  <span className="block text-sm font-black">{plan}</span>
-                  <span className="mt-1 block text-xs">{plan === 'Standard Plan' ? '6 months | 7% p.a.' : '12 months | 15% p.a.'}</span>
-                </button>
-              ))}
-            </div>
+          {productType === 'Monthly Savings' ? (
+            <p className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-3 text-xs font-semibold leading-5 text-zinc-600 dark:text-white/60">
+              Enter your monthly contribution. Duration is fixed at {SAVINGS_DURATION_MONTHS} months, with payout at month {SAVINGS_PAYOUT_MONTH}.
+            </p>
           ) : (
             <div className="space-y-3">
               <p className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-3 text-xs font-semibold leading-5 text-zinc-600 dark:text-white/60">
                 {fixedDepositTier}
               </p>
               <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Fixed deposit tenure</p>
+                <p className="mb-2 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Fixed investment term</p>
                 <div className="grid grid-cols-2 gap-3">
                   {([6, 12] as FixedDepositDuration[]).map((months) => (
                     <button
@@ -376,12 +380,14 @@ function RoiCalculatorModal({
           )}
 
           <label className="flex flex-col gap-2.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-white/40">Amount</span>
+            <span className="text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-white/40">
+              {productType === 'Monthly Savings' ? 'Monthly Contribution' : 'Investment Amount'}
+            </span>
             <div className="flex h-12 items-center rounded-xl border border-brand-border bg-brand-ghost px-4 focus-within:border-brand-amber focus-within:ring-2 focus-within:ring-[#D4AF37]/15 dark:border-white/10 dark:bg-white/[0.04]">
               <span className="text-sm font-black text-[#D4AF37]">₦</span>
               <input
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                value={formatAmountInput(amount)}
+                onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ''))}
                 inputMode="decimal"
                 className="min-w-0 flex-1 bg-transparent px-2 text-sm font-semibold text-brand-ink outline-none dark:text-white"
               />
@@ -396,31 +402,40 @@ function RoiCalculatorModal({
                 onClick={() => setAmount(String(quickAmount))}
                 className="rounded-xl border border-brand-border bg-zinc-50 px-3 py-2.5 text-xs font-medium text-zinc-600 transition hover:border-[#D4AF37]/40 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/50"
               >
-                {formatCurrency(quickAmount).replace('.00', '')}
+                <span className="sm:hidden">{formatCompactCurrency(quickAmount)}</span>
+                <span className="hidden sm:inline">{formatCurrency(quickAmount).replace('.00', '')}</span>
               </button>
             ))}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {[
-              ['Principal', principal],
-              ['Interest Earned', interest],
-              ['Total Payout', totalPayout],
-              [payoutCadence, periodicReturn],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-xl border border-brand-border bg-zinc-50 p-5 dark:border-white/10 dark:bg-white/[0.04]">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500 dark:text-white/35">{label}</p>
-                <p className="mt-2 text-lg font-black text-[#D4AF37]">{formatCurrency(Number(value))}</p>
+            {(productType === 'Monthly Savings'
+              ? [
+                  ['Monthly Contribution', principal],
+                  [`${SAVINGS_DURATION_MONTHS}-Month Total Contributed`, savingsTotalContributed],
+                  [`Payout at Month ${SAVINGS_PAYOUT_MONTH}`, totalPayout],
+                  ['Return Amount', interest],
+                ]
+              : [
+                  ['Principal', principal],
+                  ['Interest Earned', interest],
+                  ['Total Payout', totalPayout],
+                  ['Quarterly Interest', quarterlyInterest],
+                ]
+            ).map(([label, value]) => (
+              <div key={String(label)} className="flex min-h-[124px] flex-col items-center justify-center rounded-xl border border-brand-border bg-zinc-50 p-4 text-center dark:border-white/10 dark:bg-white/[0.04]">
+                <p className="max-w-full break-words text-center text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500 dark:text-white/35">{label}</p>
+                <p className="mt-3 max-w-full whitespace-nowrap text-center text-[13px] font-black leading-tight text-[#D4AF37] sm:text-[clamp(0.9rem,4.1vw,1.125rem)]">{formatCurrency(Number(value))}</p>
               </div>
             ))}
           </div>
 
           <div className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-4">
             <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">
-              {productType === 'Savings Plan' ? 'Savings Plan Conditions' : 'Fixed Deposit Conditions'}
+              {productType === 'Monthly Savings' ? 'Monthly Savings Conditions' : 'Fixed Investment Conditions'}
             </p>
             <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-600 dark:text-white/55">
-              {(productType === 'Savings Plan' ? savingsConditions : fixedDepositConditions).map((condition) => (
+              {(productType === 'Monthly Savings' ? savingsConditions : fixedDepositConditions).map((condition) => (
                 <li key={condition} className="flex gap-2">
                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#D4AF37]" />
                   <span>{condition}</span>
@@ -447,7 +462,6 @@ function RoiCalculatorModal({
     </div>
   );
 }
-
 function StatusBadge({ status }: { status: string }) {
   const normalized = normalizeStatus(status);
 
@@ -574,7 +588,7 @@ function DashboardModal({
     setSuccess(null);
 
     if (parsedDepositAmount < 1000) {
-      setError('Minimum deposit amount is ₦1,000.');
+      setError('Minimum: 1,000');
       return;
     }
 
@@ -602,7 +616,7 @@ function DashboardModal({
     setSuccess(null);
 
     if (parsedDepositAmount < 1000) {
-      setError('Minimum deposit amount is ₦1,000.');
+      setError('Minimum: 1,000');
       return;
     }
 
@@ -762,7 +776,7 @@ function DashboardModal({
                       setError(null);
                     }}
                     inputMode="decimal"
-                    placeholder="Minimum ₦1,000"
+                    placeholder="Minimum: 1,000"
                     className="h-12 rounded-xl border border-brand-border bg-brand-ghost px-4 text-sm font-semibold text-brand-ink outline-none transition focus:border-brand-amber focus:ring-2 focus:ring-[#D4AF37]/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                   />
                 </label>
@@ -1144,10 +1158,10 @@ export default function DashboardClient({
       : 'Custom date range';
   const netGrowthToneClass =
     netGrowth > 0
-      ? 'border-[#A8D63F]/30 bg-[#A8D63F]/15 text-[#7CA31F] dark:border-[#A8D63F]/35 dark:bg-[#A8D63F]/15 dark:text-[#B9F04A]'
+      ? 'border-[#789E31]/25 bg-[#789E31]/10 text-[#789E31] dark:border-[#A8D63F]/35 dark:bg-[#A8D63F]/15 dark:text-[#B9F04A]'
       : netGrowth < 0
         ? 'border-red-500/20 bg-red-500/10 text-red-500 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300'
-        : 'border-[#A8D63F]/35 bg-[#A8D63F]/12 text-[#6F9519] dark:border-[#A8D63F]/40 dark:bg-[#A8D63F]/12 dark:text-[#C4FF52]';
+        : 'border-[#789E31]/25 bg-[#789E31]/10 text-[#789E31] dark:border-[#A8D63F]/40 dark:bg-[#A8D63F]/12 dark:text-[#C4FF52]';
   const statementTransactions = useMemo(
     () => filterStatementTransactions(transactions, statementFromDate, statementToDate),
     [statementFromDate, statementToDate, transactions]
@@ -1384,15 +1398,29 @@ export default function DashboardClient({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-brand-alabaster font-sans text-brand-ink dark:bg-[#0A0A0A] dark:text-white">
-      <div className="absolute inset-0 brand-grid" aria-hidden="true" />
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+          }}
+        />
+        <div
+          className="absolute top-[-12%] left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full opacity-[0.24] blur-3xl dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse, rgba(212,175,55,0.78) 0%, rgba(30,144,255,0.4) 48%, rgba(245,240,232,0) 76%)',
+          }}
+        />
+      </div>
+      <div className="absolute inset-0 brand-grid opacity-60 dark:opacity-100" aria-hidden="true" />
       <div
-        className="absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full opacity-[0.04] blur-3xl dark:opacity-[0.08]"
+        className="absolute left-1/2 top-0 hidden h-[520px] w-[900px] -translate-x-1/2 rounded-full opacity-[0.04] blur-3xl dark:block dark:opacity-[0.08]"
         style={{ background: 'radial-gradient(ellipse, #D4AF37 0%, #0093D8 48%, transparent 72%)' }}
         aria-hidden="true"
       />
 
       <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <nav className="dashboard-reveal mb-4 flex flex-col gap-2 md:mb-8 md:flex-row md:items-center md:justify-between md:gap-3 md:rounded-2xl md:border md:border-brand-border md:bg-white/85 md:p-4 md:backdrop-blur-xl md:dark:border-white/[0.08] md:dark:bg-white/[0.035]">
+        <nav className="dashboard-reveal mb-4 flex flex-col gap-2 md:mb-8 md:flex-row md:items-center md:justify-between md:gap-3 md:rounded-2xl md:border md:border-[var(--border-color)] md:bg-[var(--nav-bg)] md:p-4 md:shadow-[var(--nav-shadow)] md:backdrop-blur-xl md:dark:border-white/[0.08] md:dark:bg-white/[0.035] md:dark:shadow-none">
           <Link href="/" className="flex min-w-0 shrink items-center justify-center gap-3 px-3 py-2 md:justify-start md:p-0">
             <img
               src="/logo.png"
@@ -1409,12 +1437,12 @@ export default function DashboardClient({
               </p>
             </div>
           </Link>
-          <div className="flex shrink-0 items-center justify-between gap-1.5 rounded-2xl border border-brand-border bg-white/85 p-2 backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035] md:justify-start md:gap-2 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none md:dark:bg-transparent">
+          <div className="flex shrink-0 items-center justify-between gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--nav-bg)] p-2 shadow-[var(--nav-shadow)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-none md:justify-start md:gap-2 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none md:dark:bg-transparent">
             <div className="group relative">
               <button
                 type="button"
                 onClick={() => setShowRoiCalculator(true)}
-                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#0093D8]/28 bg-transparent text-[#5FB4E3] transition duration-200 ease-out hover:scale-105 hover:border-[#0093D8]/45 hover:shadow-[0_0_14px_rgba(0,147,216,0.22)] focus-visible:scale-105 focus-visible:border-[#0093D8]/45 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(0,147,216,0.22)] dark:border-[#0093D8]/30 dark:text-[#7BC8F2] md:h-10 md:w-10"
+                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#0093D8]/28 bg-transparent text-[#5FB4E3] shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-[#0093D8]/45 hover:shadow-[0_0_14px_rgba(0,147,216,0.22)] focus-visible:scale-105 focus-visible:border-[#0093D8]/45 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(0,147,216,0.22)] dark:border-[#0093D8]/30 dark:text-[#7BC8F2] dark:shadow-none md:h-10 md:w-10"
                 aria-label="Open ROI calculator"
               >
                 <Calculator size={16} strokeWidth={2} />
@@ -1427,7 +1455,7 @@ export default function DashboardClient({
             <div className="group relative md:hidden">
               <Link
                 href="/dashboard/profile"
-                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/30 bg-transparent text-[#C9A335] transition duration-200 ease-out hover:scale-105 hover:border-[#D4AF37]/48 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)] focus-visible:scale-105 focus-visible:border-[#D4AF37]/48 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(212,175,55,0.22)] dark:border-[#D4AF37]/32 dark:bg-transparent dark:text-[#E8C762] md:h-10 md:w-10"
+                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/30 bg-transparent text-[#C9A335] shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-[#D4AF37]/48 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)] focus-visible:scale-105 focus-visible:border-[#D4AF37]/48 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(212,175,55,0.22)] dark:border-[#D4AF37]/32 dark:bg-transparent dark:text-[#E8C762] dark:shadow-none md:h-10 md:w-10"
                 aria-label="Open profile"
               >
                 <UserRound size={16} strokeWidth={2} />
@@ -1443,7 +1471,7 @@ export default function DashboardClient({
                   setActiveModal(null);
                   setNotificationOpen((current) => !current);
                 }}
-                className="peer relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#A8D63F]/22 bg-transparent text-[#789E31] transition duration-200 ease-out hover:scale-105 hover:border-[#A8D63F]/34 hover:shadow-[0_0_12px_rgba(168,214,63,0.16)] focus-visible:scale-105 focus-visible:border-[#A8D63F]/34 focus-visible:outline-none focus-visible:shadow-[0_0_12px_rgba(168,214,63,0.16)] dark:border-[#A8D63F]/24 dark:text-[#9BC84D] md:h-10 md:w-10"
+                className="peer relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#A8D63F]/30 bg-transparent text-[#789E31] shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-[#A8D63F]/44 hover:shadow-[0_0_12px_rgba(168,214,63,0.16)] focus-visible:scale-105 focus-visible:border-[#A8D63F]/44 focus-visible:outline-none focus-visible:shadow-[0_0_12px_rgba(168,214,63,0.16)] dark:border-[#A8D63F]/40 dark:text-[#9BC84D] dark:shadow-none md:h-10 md:w-10"
                 aria-label="Open notifications"
               >
                 <Bell size={16} />
@@ -1460,7 +1488,7 @@ export default function DashboardClient({
             <div className="group relative">
               <Link
                 href="/"
-                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#0093D8]/28 bg-transparent text-[#5FB4E3] transition duration-200 ease-out hover:scale-105 hover:border-[#0093D8]/45 hover:shadow-[0_0_14px_rgba(0,147,216,0.22)] focus-visible:scale-105 focus-visible:border-[#0093D8]/45 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(0,147,216,0.22)] dark:border-[#0093D8]/30 dark:text-[#7BC8F2] md:h-10 md:w-10"
+                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#0093D8]/28 bg-transparent text-[#5FB4E3] shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-[#0093D8]/45 hover:shadow-[0_0_14px_rgba(0,147,216,0.22)] focus-visible:scale-105 focus-visible:border-[#0093D8]/45 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(0,147,216,0.22)] dark:border-[#0093D8]/30 dark:text-[#7BC8F2] dark:shadow-none md:h-10 md:w-10"
                 aria-label="Go to homepage"
               >
                 <Home size={16} strokeWidth={2} />
@@ -1470,25 +1498,12 @@ export default function DashboardClient({
                 Home
               </span>
             </div>
-            <div className="group relative">
-              <Link
-                href="/marketplace"
-                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/30 bg-transparent text-[#C9A335] transition duration-200 ease-out hover:scale-105 hover:border-[#D4AF37]/48 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)] focus-visible:scale-105 focus-visible:border-[#D4AF37]/48 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(212,175,55,0.22)] dark:border-[#D4AF37]/32 dark:text-[#E8C762] md:h-10 md:w-10"
-                aria-label="Open marketplace"
-              >
-                <ShoppingBag size={16} strokeWidth={2} />
-                <span className="sr-only">Marketplace</span>
-              </Link>
-              <span className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-20 -translate-x-1/2 rounded-md border border-brand-border bg-white px-2 py-1 text-[10px] font-normal text-brand-ink opacity-0 shadow-xl shadow-zinc-900/10 transition group-hover:opacity-100 peer-focus-visible:opacity-100 dark:border-white/10 dark:bg-[#111] dark:text-white">
-                Marketplace
-              </span>
-            </div>
             {mounted && (
               <div className="group relative">
                 <button
                   type="button"
                   onClick={() => setTheme(isDark ? 'light' : 'dark')}
-                  className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/30 bg-transparent text-[#C9A335] transition duration-200 ease-out hover:scale-105 hover:border-[#D4AF37]/48 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)] focus-visible:scale-105 focus-visible:border-[#D4AF37]/48 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(212,175,55,0.22)] dark:border-[#D4AF37]/32 dark:text-[#E8C762] md:h-10 md:w-10"
+                  className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/30 bg-transparent text-[#C9A335] shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-[#D4AF37]/48 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)] focus-visible:scale-105 focus-visible:border-[#D4AF37]/48 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(212,175,55,0.22)] dark:border-[#D4AF37]/32 dark:text-[#E8C762] dark:shadow-none md:h-10 md:w-10"
                   aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
                 >
                   {isDark ? <Sun size={17} className="text-[#D4AF37]" /> : <Moon size={17} />}
@@ -1502,7 +1517,7 @@ export default function DashboardClient({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/24 bg-red-500/8 text-red-400 transition duration-200 ease-out hover:scale-105 hover:border-red-500/42 hover:bg-red-500/90 hover:text-white hover:shadow-[0_0_14px_rgba(239,68,68,0.22)] focus-visible:scale-105 focus-visible:border-red-500/42 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(239,68,68,0.22)] dark:border-red-400/25 dark:bg-red-400/8 dark:text-red-300 dark:hover:bg-red-500 dark:hover:text-white md:h-10 md:w-10"
+                className="peer inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/24 bg-red-500/8 text-red-400 shadow-[0_5px_16px_rgba(139,109,56,0.16)] transition duration-200 ease-out hover:scale-105 hover:border-red-500/42 hover:bg-red-500/90 hover:text-white hover:shadow-[0_0_14px_rgba(239,68,68,0.22)] focus-visible:scale-105 focus-visible:border-red-500/42 focus-visible:outline-none focus-visible:shadow-[0_0_14px_rgba(239,68,68,0.22)] dark:border-red-400/25 dark:bg-red-400/8 dark:text-red-300 dark:shadow-none dark:hover:bg-red-500 dark:hover:text-white md:h-10 md:w-10"
                 aria-label="Logout"
               >
                 <LogOut size={16} />
@@ -1525,7 +1540,7 @@ export default function DashboardClient({
           <>
             {incognito && (
               <div className="dashboard-reveal mb-4 rounded-2xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-4 py-3 text-xs font-bold text-[#D4AF37] md:mb-6">
-                Incognito mode on — balances hidden
+                Incognito mode on â€” balances hidden
               </div>
             )}
 
@@ -1580,9 +1595,13 @@ export default function DashboardClient({
             )}
 
             <section className="mx-auto grid max-w-6xl gap-3 md:gap-6 lg:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)] lg:items-stretch">
-              <div className="dashboard-reveal relative overflow-hidden rounded-2xl border border-brand-border bg-brand-ghost px-4 py-4 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-white/[0.035] md:p-6">
+              <div className="dashboard-reveal relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] px-4 py-4 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-white/[0.035] md:p-6">
                 <div
-                  className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full border border-[#D4AF37]/15 bg-[#D4AF37]/[0.04]"
+                  className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full border border-[#D4AF37]/34 bg-[radial-gradient(circle_at_35%_35%,rgba(212,175,55,0.28)_0%,rgba(212,175,55,0.14)_44%,rgba(212,175,55,0.02)_74%)] shadow-[0_0_46px_rgba(212,175,55,0.18)] dark:hidden"
+                  aria-hidden="true"
+                />
+                <div
+                  className="pointer-events-none absolute -right-12 -top-12 hidden h-44 w-44 rounded-full border border-[#D4AF37]/15 bg-[#D4AF37]/[0.04] dark:block"
                   aria-hidden="true"
                 />
                 <div
@@ -1591,10 +1610,10 @@ export default function DashboardClient({
                 />
                 <div className="relative flex h-full min-h-[150px] flex-col justify-between gap-4 md:min-h-[250px] md:gap-8">
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-zinc-500 dark:text-white/40">
+                    <p className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)] dark:text-white/40">
                       Total Balance
                     </p>
-                    <Link href="/dashboard/profile" className="hidden shrink-0 items-center gap-2 rounded-2xl border border-brand-border bg-zinc-50 px-3 py-2 transition hover:border-[#D4AF37]/40 dark:border-white/10 dark:bg-white/[0.04] md:inline-flex">
+                    <Link href="/dashboard/profile" className="hidden shrink-0 items-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 transition hover:border-[#D4AF37]/40 dark:border-white/10 dark:bg-white/[0.04] md:inline-flex">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#D4AF37]">
                         <UserRound size={18} strokeWidth={2.2} />
                       </div>
@@ -1603,7 +1622,7 @@ export default function DashboardClient({
                   </div>
 
                   <div className="flex flex-1 flex-col justify-center">
-                    <h1 className={`overflow-hidden text-ellipsis whitespace-nowrap font-black tracking-tight sm:text-5xl xl:text-6xl ${getAmountFontSize(balance)}`}>{displayCurrency(balance)}</h1>
+                    <h1 className={`overflow-hidden text-ellipsis whitespace-nowrap font-black tracking-tight text-[var(--text-primary)] dark:text-white sm:text-5xl xl:text-6xl ${getAmountFontSize(balance)}`}>{displayCurrency(balance)}</h1>
                     <div className={`mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black sm:w-fit sm:justify-start md:mt-4 md:gap-2 md:px-3 md:py-1.5 md:text-sm ${netGrowthToneClass}`}>
                       <TrendingUp className="h-3.5 w-3.5 md:h-[15px] md:w-[15px]" />
                       {netGrowth > 0 ? '+' : ''}
@@ -1616,9 +1635,9 @@ export default function DashboardClient({
               <div className="grid grid-cols-2 gap-3 md:gap-4">
                 <button
                   onClick={() => openDepositModal()}
-                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-brand-border bg-brand-ghost p-3 text-center shadow-xl shadow-zinc-900/[0.03] transition hover:-translate-y-0.5 hover:border-[#D4AF37]/40 dark:border-white/[0.08] dark:bg-white/[0.035] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
+                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-3 text-center shadow-[var(--shadow-card)] [transition:all_0.2s_ease] hover:-translate-y-0.5 hover:border-[#D4AF37]/40 hover:shadow-[var(--shadow-card-hover)] dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-xl dark:shadow-zinc-900/[0.03] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
                 >
-                  <ArrowDownToLine className="h-6 w-6 text-[#D4AF37]" />
+                  <ArrowDownToLine className="h-6 w-6 text-[var(--gold-accent)]" />
                   <div>
                     <p className="text-sm font-black md:text-lg">Deposit</p>
                     <p className="mt-1 hidden text-sm text-zinc-500 dark:text-white/40 md:block">Add funds to your cooperative account</p>
@@ -1629,9 +1648,9 @@ export default function DashboardClient({
                     setNotificationOpen(false);
                     setActiveModal('withdraw');
                   }}
-                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-brand-border bg-brand-ghost p-3 text-center shadow-xl shadow-zinc-900/[0.03] transition hover:-translate-y-0.5 hover:border-[#D4AF37]/40 dark:border-white/[0.08] dark:bg-white/[0.035] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
+                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-3 text-center shadow-[var(--shadow-card)] [transition:all_0.2s_ease] hover:-translate-y-0.5 hover:border-[#D4AF37]/40 hover:shadow-[var(--shadow-card-hover)] dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-xl dark:shadow-zinc-900/[0.03] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
                 >
-                  <ArrowUpRight className="h-6 w-6 text-[#D4AF37]" />
+                  <ArrowUpRight className="h-6 w-6 text-[var(--gold-accent)]" />
                   <p className="text-sm font-black md:hidden">Withdraw</p>
                   <div className="hidden md:block">
                     <p className="text-sm font-black md:text-lg">Withdraw</p>
@@ -1640,9 +1659,9 @@ export default function DashboardClient({
                 </button>
                 <Link
                   href="/dashboard/investments"
-                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-brand-border bg-brand-ghost p-3 text-center shadow-xl shadow-zinc-900/[0.03] transition hover:-translate-y-0.5 hover:border-[#D4AF37]/40 dark:border-white/[0.08] dark:bg-white/[0.035] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
+                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-3 text-center shadow-[var(--shadow-card)] [transition:all_0.2s_ease] hover:-translate-y-0.5 hover:border-[#D4AF37]/40 hover:shadow-[var(--shadow-card-hover)] dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-xl dark:shadow-zinc-900/[0.03] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
                 >
-                  <TrendingUp className="h-6 w-6 text-[#D4AF37]" />
+                  <TrendingUp className="h-6 w-6 text-[var(--gold-accent)]" />
                   <div>
                     <p className="text-sm font-black md:text-lg">Investments</p>
                     <p className="mt-1 hidden text-sm text-zinc-500 dark:text-white/40 md:block">Grow your capital with Smart Save</p>
@@ -1650,9 +1669,9 @@ export default function DashboardClient({
                 </Link>
                 <Link
                   href="/dashboard/loans"
-                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-brand-border bg-brand-ghost p-3 text-center shadow-xl shadow-zinc-900/[0.03] transition hover:-translate-y-0.5 hover:border-[#D4AF37]/40 dark:border-white/[0.08] dark:bg-white/[0.035] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
+                  className="dashboard-reveal group flex min-h-[84px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-3 text-center shadow-[var(--shadow-card)] [transition:all_0.2s_ease] hover:-translate-y-0.5 hover:border-[#D4AF37]/40 hover:shadow-[var(--shadow-card-hover)] dark:border-white/[0.08] dark:bg-white/[0.035] dark:shadow-xl dark:shadow-zinc-900/[0.03] md:min-h-[120px] md:items-start md:justify-between md:p-5 md:text-left"
                 >
-                  <Banknote className="h-6 w-6 text-[#D4AF37]" />
+                  <Banknote className="h-6 w-6 text-[var(--gold-accent)]" />
                   <div>
                     <p className="text-sm font-black md:text-lg">Loans</p>
                     <p className="mt-1 hidden text-sm text-zinc-500 dark:text-white/40 md:block">Access financing when you need it</p>
@@ -1661,34 +1680,34 @@ export default function DashboardClient({
               </div>
             </section>
 
-            <section className="dashboard-reveal mt-4 rounded-2xl border border-brand-border bg-brand-ghost p-5 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-[#101010] md:mt-6">
+            <section className="dashboard-reveal mt-4 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-[#101010] md:mt-6">
               <div className="mb-5">
-                <p className="text-xs font-black uppercase tracking-widest text-brand-amber dark:text-[#D4AF37]">
+                <p className="text-xs font-black uppercase tracking-widest text-[var(--gold-text)] dark:text-[#D4AF37]">
                   Account Overview
                 </p>
-                <h2 className="mt-1 text-2xl font-black">Contribution summary</h2>
+                <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)] dark:text-white">Contribution summary</h2>
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <div className="dashboard-reveal overflow-hidden rounded-2xl border border-brand-border bg-zinc-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="dashboard-reveal overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500 dark:text-white/35">Total Deposited</p>
                   <p className={`mt-3 whitespace-nowrap text-xl font-bold text-brand-amber dark:text-[#D4AF37] sm:text-2xl ${getAmountFontSize(totalDeposited).includes('text-lg') ? 'text-lg' : getAmountFontSize(totalDeposited).includes('text-xl') ? 'text-xl' : ''}`}>
                     {displayCurrency(totalDeposited)}
                   </p>
                 </div>
-                <div className="dashboard-reveal overflow-hidden rounded-2xl border border-[#9DC03A]/20 bg-[#9DC03A]/10 p-4">
+                <div className="dashboard-reveal overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-4 dark:border-[#9DC03A]/20 dark:bg-[#9DC03A]/10">
                   <p className="text-[11px] font-black uppercase tracking-widest text-[#9DC03A]">Interest / Dividends</p>
                   <p className={`mt-3 whitespace-nowrap text-xl font-bold text-[#9DC03A] sm:text-2xl ${getAmountFontSize(totalInterest).includes('text-lg') ? 'text-lg' : getAmountFontSize(totalInterest).includes('text-xl') ? 'text-xl' : ''}`}>
                     {displayCurrency(totalInterest)}
                   </p>
                 </div>
-                <div className="dashboard-reveal rounded-2xl border border-brand-border bg-zinc-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="dashboard-reveal rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500 dark:text-white/35">Member Since</p>
                   <p className="mt-3 text-lg font-black text-brand-ink dark:text-white sm:text-xl">
                     {formatMemberSince(activeProfile.created_at)}
                   </p>
                 </div>
-                <div className="dashboard-reveal rounded-2xl border border-brand-border bg-zinc-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="dashboard-reveal rounded-2xl border border-[var(--border-color)] bg-[#FFFFFF] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500 dark:text-white/35">Next Contribution</p>
                   <Link href="/contact" className="mt-3 inline-flex text-lg font-black text-brand-amber transition hover:text-[#D4AF37] hover:underline dark:text-[#D4AF37] dark:hover:text-[#F5D06B] sm:text-xl">
                     Contact Admin
@@ -1727,7 +1746,7 @@ export default function DashboardClient({
                     type="button"
                     onClick={downloadStatement}
                     disabled={statementTransactions.length === 0}
-                    className="col-span-2 inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-3 text-sm font-black text-brand-ink transition hover:bg-[#F5D06B] disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1 sm:mt-5 sm:w-full sm:px-4"
+                    className="col-span-2 inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-3 text-sm font-black text-[#1A1410] shadow-[0_8px_18px_rgba(212,175,55,0.22)] transition hover:bg-[#C4A030] disabled:cursor-not-allowed disabled:opacity-100 dark:text-brand-ink dark:shadow-none dark:disabled:opacity-50 sm:col-span-1 sm:mt-5 sm:w-full sm:px-4"
                   >
                     <Download size={16} />
                     Download Statement (PDF)

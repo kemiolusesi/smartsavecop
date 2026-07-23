@@ -1,4 +1,5 @@
 import { supabase } from '@/utils/supabase/client';
+import { parseError } from '@/lib/parseError';
 
 type PaymentType = 'registration' | 'deposit' | 'loan_repayment' | 'investment';
 
@@ -38,7 +39,7 @@ export async function submitPayment({
   if (error) {
     return {
       success: false,
-      error: error.message || 'Something went wrong. Please try again.',
+      error: parseError(error),
     };
   }
 

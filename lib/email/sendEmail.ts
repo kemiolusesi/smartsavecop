@@ -1,5 +1,23 @@
 const FROM_ADDRESS = 'Smart Save Cooperative <onboarding@resend.dev>';
-const RESEND_EMAILS_API = 'https://api.resend.com/emails';
+
+type ResendClientConstructor = new (apiKey: string) => {
+  emails: {
+    send(args: {
+      from: string;
+      to: string;
+      subject: string;
+      html: string;
+    }): Promise<{ error?: { message?: string } | null }>;
+  };
+};
+
+async function loadResend() {
+  const dynamicImport = new Function('specifier', 'return import(specifier)') as (
+    specifier: string
+  ) => Promise<{ Resend: ResendClientConstructor }>;
+
+  return dynamicImport('resend');
+}
 
 export async function sendEmail({
   to,
@@ -21,27 +39,18 @@ export async function sendEmail({
     }
 
     const apiKey = process.env.RESEND_API_KEY;
-    const response = await fetch(RESEND_EMAILS_API, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to,
-        subject,
-        html,
-      }),
+    const { Resend } = await loadResend();
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from: FROM_ADDRESS,
+      to,
+      subject,
+      html,
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message =
-        payload && typeof payload === 'object' && 'message' in payload
-          ? String(payload.message)
-          : 'Unable to send email.';
-      console.error('Resend email API failed:', message, payload);
+    if (error) {
+      const message = error.message || 'Unable to send email.';
+      console.error('Resend email API failed:', message, error);
       return { success: false, error: message };
     }
 

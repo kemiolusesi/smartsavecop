@@ -12,7 +12,7 @@ const FEATURES = [
   {
     icon: TrendingUp,
     title: 'High-Yield Investments',
-    description: 'Deposit a lump sum and earn 1%-2% monthly returns across our tiered Fixed Deposit investment plans.',
+    description: 'Deposit a lump sum and earn tiered monthly interest paid quarterly through our Fixed Investment plan.',
     color: '#8BC34A',
   },
   {
@@ -69,7 +69,7 @@ export default function Features() {
           {FEATURES.map((feature) => (
             <div
               key={feature.title}
-              className="group rounded-xl border border-brand-border bg-brand-ghost p-6 backdrop-blur-sm transition-all hover:border-brand-input hover:shadow-sm dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.15] dark:hover:bg-white/[0.04]"
+              className="group rounded-xl border border-brand-border bg-brand-ghost p-6 shadow-[0_2px_8px_rgba(139,109,56,0.08)] backdrop-blur-sm transition-all hover:border-brand-input hover:shadow-[0_2px_12px_rgba(139,109,56,0.12)] dark:border-white/[0.08] dark:bg-white/[0.02] dark:shadow-none dark:hover:border-white/[0.15] dark:hover:bg-white/[0.04]"
             >
               <div
                 className="w-12 h-12 rounded-lg mb-4 flex items-center justify-center transition-transform group-hover:scale-110"

@@ -1,9 +1,9 @@
 export const INVESTMENT_PRODUCTS = [
   {
     name: 'Normal Savings Account',
-    description: 'Build consistent wealth through regular monthly contributions and earn annual dividends.',
-    benefits: ['Regular contributions', 'Annual dividends', 'Members only'],
-    full: 'A member-only cooperative savings account for regular monthly contributions, with annual dividends set by the cooperative each year.',
+    description: 'Build consistent wealth through monthly contributions with one payout at month 13.',
+    benefits: ['Monthly contributions', '12-month duration', 'Month-13 payout', 'Members only'],
+    full: 'A member-only cooperative savings account for fixed monthly contributions over 12 consecutive months, with one payout at month 13.',
     amountField: 'monthlyContribution',
   },
   {
@@ -15,9 +15,9 @@ export const INVESTMENT_PRODUCTS = [
   },
   {
     name: 'Fixed Deposit Investment',
-    description: 'Deposit a lump sum and earn competitive returns agreed at enrollment.',
-    benefits: ['Lump sum deposit', 'Agreed returns', 'Flexible tenure', 'Members and non-members'],
-    full: 'A fixed deposit plan for members and non-members who want to place a lump sum for a flexible tenure with returns agreed at enrollment.',
+    description: 'Deposit a lump sum and earn tiered monthly interest paid quarterly.',
+    benefits: ['Lump sum deposit', 'Tiered monthly interest', 'Quarterly payouts', 'Members only'],
+    full: 'A fixed investment plan for members who want to place a lump sum for an agreed term, with capital returned in full at maturity.',
     amountField: 'lumpSumAmount',
   },
   {

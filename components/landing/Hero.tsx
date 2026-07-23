@@ -9,6 +9,18 @@ export default function Hero() {
       {/* Background Lighting Rig */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+          }}
+        />
+        <div
+          className="absolute top-[-12%] left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full opacity-[0.24] blur-3xl dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse, rgba(212,175,55,0.78) 0%, rgba(30,144,255,0.4) 48%, rgba(245,240,232,0) 76%)',
+          }}
+        />
+        <div
           className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full opacity-[0.025] dark:opacity-[0.06]"
           style={{
             background: 'radial-gradient(ellipse, #D4AF37 0%, #1E90FF 50%, transparent 75%)',
@@ -53,9 +65,7 @@ export default function Hero() {
 
         {/* Subheading Narrative */}
         <p className="text-sm sm:text-lg text-zinc-600 max-w-2xl mx-auto leading-relaxed mb-10 font-medium px-2 dark:text-white/50">
-          Earn up to{' '}
-          <span className="text-brand-emerald font-bold dark:text-[#8BC34A]">15% annual returns</span>{' '}
-          through Nigeria's most transparent savings cooperative.
+          Earn structured returns through fixed investments and monthly savings with Nigeria's most transparent savings cooperative.
           <br />
           Join thousands building generational wealth.
         </p>
@@ -70,7 +80,7 @@ export default function Hero() {
             <ArrowRight size={14} className="transition-transform duration-200 group-hover:translate-x-1 hidden sm:inline-block" />
           </Link>
           
-          <a href="#calculator" className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-8 py-3.5 rounded-xl font-semibold text-[11px] sm:text-sm text-zinc-700 border border-brand-border bg-brand-ghost backdrop-blur-sm hover:border-brand-input hover:text-brand-ink transition-all duration-200 whitespace-nowrap dark:text-white/70 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20 dark:hover:text-white">
+          <a href="#calculator" className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-8 py-3.5 rounded-xl font-semibold text-[11px] sm:text-sm text-brand-ink border-[1.5px] border-[#C4A85A] bg-brand-ghost backdrop-blur-sm hover:border-[#C4A85A] hover:text-brand-ink transition-all duration-200 whitespace-nowrap dark:text-white/70 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20 dark:hover:text-white">
             View ROI Calculator
           </a>
         </div>
@@ -84,7 +94,7 @@ export default function Hero() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-xl border border-brand-border bg-brand-ghost p-2.5 sm:p-4 backdrop-blur-sm dark:border-white/[0.05] dark:bg-white/[0.02]"
+              className="rounded-xl border border-brand-border bg-brand-ghost p-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] sm:p-4 backdrop-blur-sm dark:border-white/[0.05] dark:bg-white/[0.02] dark:shadow-none"
             >
               <p
                 className={`text-base sm:text-2xl font-black mb-0.5 ${

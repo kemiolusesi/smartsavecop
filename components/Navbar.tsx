@@ -48,7 +48,7 @@ export default function Navbar() {
   );
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/92 shadow-[0_1px_3px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors dark:border-b dark:border-white/[0.08] dark:bg-[#0A0A0A]/80 dark:shadow-none">
+    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-brand-border/60 bg-brand-surface/60 shadow-[0_8px_28px_rgba(139,109,56,0.10)] backdrop-blur-xl backdrop-saturate-150 transition-colors dark:border-white/[0.08] dark:bg-[#0A0A0A]/60 dark:shadow-none">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         
         {/* Brand Core Node Identity */}
@@ -110,7 +110,7 @@ export default function Navbar() {
                 <LogOut size={18} />
                 
                 {/* Hardware-Accelerated Accessibility Subtitle Tooltip */}
-                <span className="absolute top-12 left-1/2 -translate-x-1/2 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 bg-white border border-brand-border text-brand-ink text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded shadow-xl whitespace-nowrap z-50 dark:bg-[#111111] dark:border-white/10 dark:text-white">
+                <span className="absolute top-12 left-1/2 -translate-x-1/2 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 bg-brand-surface border border-brand-border text-brand-ink text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded shadow-xl whitespace-nowrap z-50 dark:bg-[#111111] dark:border-white/10 dark:text-white">
                   Logout
                 </span>
               </button>
@@ -137,8 +137,16 @@ export default function Navbar() {
 
       {/* Mobile Component Stack Workspace Viewport */}
       {isOpen && (
-        <div className="md:hidden border-t border-brand-border bg-white/95 shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:border-white/[0.08] dark:bg-[#0A0A0A]/95 dark:shadow-none">
-          <div className="px-4 py-4 space-y-3">
+        <div className="relative overflow-hidden border-t border-brand-border/60 bg-brand-alabaster shadow-[0_8px_24px_rgba(139,109,56,0.10)] md:hidden dark:border-white/[0.08] dark:bg-[#0A0A0A]/80 dark:shadow-none">
+          <div className="absolute inset-0 brand-grid dark:hidden" aria-hidden="true" />
+          <div
+            className="absolute inset-0 dark:hidden"
+            style={{
+              background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+            }}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 px-4 py-4 space-y-3">
             <Link href="/" onClick={() => setIsOpen(false)} className="block text-sm text-zinc-600 hover:text-brand-ink transition-colors py-2 font-normal dark:text-white/60 dark:hover:text-white">
               Home
             </Link>

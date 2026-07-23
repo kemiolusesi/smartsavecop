@@ -9,6 +9,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('http://localhost:3000'),
   title: 'Smart Save Cooperative',
   description: 'Secure financial growth through collaborative saving',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
   openGraph: {
     images: [
       {

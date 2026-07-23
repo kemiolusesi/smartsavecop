@@ -31,8 +31,13 @@ export default async function MarketplacePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8F6F1] font-sans text-[#1A1A1A] dark:bg-[#0A0A0A] dark:text-white">
-      <div className="absolute inset-0 brand-grid opacity-40 dark:opacity-60" aria-hidden="true" />
+    <main className="relative min-h-screen overflow-hidden bg-brand-alabaster font-sans text-brand-ink dark:bg-[#0A0A0A] dark:text-white">
+      <div className="absolute inset-0 brand-grid" aria-hidden="true" />
+      <div
+        className="absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full opacity-[0.04] blur-3xl dark:opacity-[0.08]"
+        style={{ background: 'radial-gradient(ellipse, #D4AF37 0%, #0093D8 48%, transparent 72%)' }}
+        aria-hidden="true"
+      />
       <Navbar />
       <div className="relative z-10">
         <MarketplaceClient ads={ads} error={error} />

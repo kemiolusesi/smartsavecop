@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabase';
 import { Profile, SavingsPlan, Transaction } from '@/lib/types/database';
+import {
+  calculateFixedQuarterlyInterest,
+  calculateFixedTotalInterest,
+  calculateFixedTotalPayout,
+  getFixedInvestmentTier,
+} from '@/lib/investment-config';
 
 export interface UserDashboard {
   profile: Profile | null;
@@ -35,8 +41,7 @@ export async function getUserDashboard(userId: string): Promise<UserDashboard> {
 
   activePlans.forEach((plan) => {
     totalBalance += plan.principal_amount + plan.accrued_interest;
-    const monthlyRate = plan.annual_rate / 12;
-    monthlyReturn += plan.principal_amount * monthlyRate;
+    monthlyReturn += calculateFixedQuarterlyInterest(plan.principal_amount);
   });
 
   return {
@@ -78,17 +83,17 @@ export async function initializeUserAccount(userId: string, fullName: string): P
 
 export async function calculateProjectedReturn(
   principalAmount: number,
-  annualRate: number,
+  _rate: number,
   months: number
 ): Promise<{
   interest: number;
   total: number;
   monthlyReturn: number;
 }> {
-  const rate = annualRate * (months / 12);
-  const interest = principalAmount * rate;
-  const total = principalAmount + interest;
-  const monthlyReturn = (interest / months);
+  const tier = getFixedInvestmentTier(principalAmount);
+  const interest = calculateFixedTotalInterest(principalAmount, months);
+  const total = calculateFixedTotalPayout(principalAmount, months);
+  const monthlyReturn = tier ? principalAmount * tier.monthlyRate : 0;
 
   return {
     interest,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createSupabaseAdminClient } from '@/lib/supabase-admin';
+import { calculateFixedQuarterlyInterest } from '@/lib/investment-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,8 +48,7 @@ export async function GET(request: NextRequest) {
 
     activePlans.forEach((plan) => {
       totalBalance += plan.principal_amount + plan.accrued_interest;
-      const monthlyRate = plan.annual_rate / 12;
-      monthlyReturn += plan.principal_amount * monthlyRate;
+      monthlyReturn += calculateFixedQuarterlyInterest(plan.principal_amount);
     });
 
     return NextResponse.json({

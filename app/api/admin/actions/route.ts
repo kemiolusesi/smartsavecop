@@ -34,6 +34,25 @@ function reference(prefix: string) {
   return `SS-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
+function addCalendarMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function toDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseInteger(value: unknown) {
+  const parsed = Number.parseInt(String(value ?? '').replace(/[^\d-]/g, ''), 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDateDdMmYyyy(value: Date) {
+  return value.toLocaleDateString('en-GB');
+}
+
 async function emailSafely(args: Parameters<typeof sendSmartSaveEmail>[0]) {
   try {
     await sendSmartSaveEmail(args);
@@ -80,6 +99,319 @@ async function notifyUserSafely(
   } catch {
     // Notifications are best-effort for admin actions.
   }
+}
+
+async function updateCooperativeBalanceAfter(context: AdminContext, ledgerRowId: string) {
+  const { data: ledgerRows, error: ledgerError } = await context.supabase
+    .from('cooperative_ledger')
+    .select('amount,direction');
+
+  if (ledgerError) throw ledgerError;
+
+  const balanceAfter = (ledgerRows || []).reduce((sum, row) => {
+    const amount = parseMoney(row.amount);
+    return String(row.direction || '').toLowerCase() === 'debit' ? sum - amount : sum + amount;
+  }, 0);
+
+  const { error: updateError } = await context.supabase
+    .from('cooperative_ledger')
+    .update({ balance_after: balanceAfter })
+    .eq('id', ledgerRowId);
+
+  if (updateError) throw updateError;
+}
+
+async function insertCooperativeLedger(
+  context: AdminContext,
+  row: {
+    transaction_type: string;
+    classification: 'asset' | 'liability';
+    reference_id: string;
+    reference_table: string;
+    amount: number;
+    direction: 'credit' | 'debit';
+    description: string;
+    member_id?: string | null;
+    processed_by?: string | null;
+  }
+) {
+  const { data: existing, error: existingError } = await context.supabase
+    .from('cooperative_ledger')
+    .select('id')
+    .eq('transaction_type', row.transaction_type)
+    .eq('reference_id', row.reference_id)
+    .eq('reference_table', row.reference_table)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing?.id) return existing;
+
+  const { data: ledgerRow, error: ledgerInsertError } = await context.supabase
+    .from('cooperative_ledger')
+    .insert({
+      ...row,
+      processed_by: row.processed_by || context.adminId,
+    })
+    .select('*')
+    .single();
+
+  if (ledgerInsertError) throw ledgerInsertError;
+  if (ledgerRow?.id) await updateCooperativeBalanceAfter(context, ledgerRow.id);
+  return ledgerRow;
+}
+
+async function finalizeApprovedInvestment(context: AdminContext, application: any, member: any) {
+  const amountPaid = parseMoney(application.amount_paid);
+  const termMonths = parseInteger(application.investment_term_months || application.tenure_months);
+  const startDate = new Date();
+  const endDate = addCalendarMonths(startDate, termMonths);
+  const startDateOnly = toDateOnly(startDate);
+  const endDateOnly = toDateOnly(endDate);
+
+  if (amountPaid <= 0) {
+    throw new Error('Amount paid is required before approving this investment.');
+  }
+  if (termMonths <= 0) {
+    throw new Error('Investment term is required before approving this investment.');
+  }
+
+  const { data: updatedApplication, error: applicationError } = await context.supabase
+    .from('investment_applications')
+    .update({
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      start_date: startDateOnly,
+      end_date: endDateOnly,
+      maturity_date: endDateOnly,
+    })
+    .eq('id', application.id)
+    .select('*')
+    .single();
+
+  if (applicationError) throw applicationError;
+
+  const { data: ledgerRow, error: ledgerInsertError } = await context.supabase
+    .from('cooperative_ledger')
+    .insert({
+      transaction_type: 'investment_received',
+      classification: 'liability',
+      reference_id: application.id,
+      reference_table: 'investment_applications',
+      amount: amountPaid,
+      direction: 'credit',
+      description: `Investment received from ${member?.full_name || member?.email || 'member'} — ${application.plan_name || application.investment_type || 'Investment plan'}`,
+      member_id: application.user_id,
+      processed_by: context.adminId,
+    })
+    .select('*')
+    .single();
+
+  if (ledgerInsertError) throw ledgerInsertError;
+  if (ledgerRow?.id) await updateCooperativeBalanceAfter(context, ledgerRow.id);
+
+  let firstPayoutAmount = 0;
+  let firstDueDate: Date | null = null;
+
+  if (application.investment_product_id) {
+    const { data: product, error: productError } = await context.supabase
+      .from('investment_products')
+      .select('monthly_rate,payout_interval_months,product_type')
+      .eq('id', application.investment_product_id)
+      .maybeSingle();
+
+    if (productError) throw productError;
+
+    const monthlyRate = Number(product?.monthly_rate || 0);
+    const payoutIntervalMonths = parseInteger(product?.payout_interval_months);
+
+    if (monthlyRate > 0 && payoutIntervalMonths > 0) {
+      const periodInterest = amountPaid * monthlyRate * payoutIntervalMonths;
+      const numPayouts = Math.floor(termMonths / payoutIntervalMonths);
+      firstPayoutAmount = periodInterest;
+
+      if (numPayouts > 0) {
+        const scheduleRows = Array.from({ length: numPayouts }, (_, index) => {
+          const payoutNumber = index + 1;
+          const dueDate = addCalendarMonths(startDate, payoutNumber * payoutIntervalMonths);
+          if (payoutNumber === 1) firstDueDate = dueDate;
+          return {
+            investment_application_id: application.id,
+            user_id: application.user_id,
+            payout_number: payoutNumber,
+            due_date: toDateOnly(dueDate),
+            amount: periodInterest,
+            status: 'pending',
+          };
+        });
+
+        const { error: deleteScheduleError } = await context.supabase
+          .from('interest_payout_schedule')
+          .delete()
+          .eq('investment_application_id', application.id);
+
+        if (deleteScheduleError) throw deleteScheduleError;
+
+        const { error: scheduleError } = await context.supabase
+          .from('interest_payout_schedule')
+          .insert(scheduleRows);
+
+        if (scheduleError) throw scheduleError;
+      }
+    }
+  }
+
+  const notificationMessage =
+    firstDueDate && firstPayoutAmount > 0
+      ? `Your investment application of ${formatNaira(amountPaid)} has been approved. Your first interest payout of ${formatNaira(firstPayoutAmount)} is scheduled for ${formatDateDdMmYyyy(firstDueDate)}.`
+      : `Your investment application of ${formatNaira(amountPaid)} has been approved.`;
+
+  const { error: notificationError } = await context.supabase.from('notifications').insert({
+    user_id: application.user_id,
+    title: 'Investment Approved',
+    message: notificationMessage,
+    is_read: false,
+    type: 'success',
+  });
+
+  if (notificationError) throw notificationError;
+
+  return updatedApplication;
+}
+
+async function findLoanProductForApplication(context: AdminContext, loan: any) {
+  if (loan.loan_product_id) {
+    const { data, error } = await context.supabase
+      .from('loan_products')
+      .select('id,name,monthly_interest_rate,tenure_months')
+      .eq('id', loan.loan_product_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  if (loan.loan_type) {
+    const { data, error } = await context.supabase
+      .from('loan_products')
+      .select('id,name,monthly_interest_rate,tenure_months')
+      .eq('name', loan.loan_type)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  return null;
+}
+
+async function finalizeApprovedLoan(context: AdminContext, loan: any, member: any) {
+  const product = await findLoanProductForApplication(context, loan);
+  const principal = parseMoney(loan.approved_amount || loan.amount_approved || loan.amount_requested);
+  const monthlyRate = Number(product?.monthly_interest_rate ?? loan.monthly_interest_rate ?? 0);
+  const tenureMonths = parseInteger(product?.tenure_months || loan.tenure_months);
+  const startDate = new Date();
+  const endDate = addCalendarMonths(startDate, tenureMonths);
+  const monthlyInterest = principal * monthlyRate;
+  const monthlyPrincipal = tenureMonths > 0 ? principal / tenureMonths : 0;
+  const monthlyTotal = monthlyInterest + monthlyPrincipal;
+  const totalRepayable = monthlyTotal * tenureMonths;
+
+  if (principal <= 0) {
+    throw new Error('Loan amount is required before approval.');
+  }
+  if (monthlyRate < 0 || tenureMonths <= 0) {
+    throw new Error('Loan product rate and tenure are required before approval.');
+  }
+
+  const now = new Date().toISOString();
+  const { data: updatedLoan, error: updateError } = await context.supabase
+    .from('loan_applications')
+    .update({
+      status: 'approved',
+      approved_amount: principal,
+      amount_approved: principal,
+      approved_at: now,
+      disbursed_at: now,
+      start_date: toDateOnly(startDate),
+      end_date: toDateOnly(endDate),
+      monthly_repayment_amount: monthlyTotal,
+      monthly_payment: monthlyTotal,
+      monthly_interest_rate: monthlyRate,
+      interest_rate: monthlyRate * 100,
+      tenure_months: tenureMonths,
+      total_repayable: totalRepayable,
+      loan_product_id: product?.id || loan.loan_product_id || null,
+    })
+    .eq('id', loan.id)
+    .select('*')
+    .single();
+
+  if (updateError) throw updateError;
+
+  const { data: ledgerRow, error: ledgerInsertError } = await context.supabase
+    .from('cooperative_ledger')
+    .insert({
+      transaction_type: 'loan_disbursed',
+      classification: 'asset',
+      reference_id: loan.id,
+      reference_table: 'loan_applications',
+      amount: principal,
+      direction: 'debit',
+      description: `Loan disbursed to ${member?.full_name || member?.email || 'member'} — ${product?.name || loan.loan_type || 'Loan plan'}, ${tenureMonths} months`,
+      member_id: loan.user_id,
+      processed_by: context.adminId,
+    })
+    .select('*')
+    .single();
+
+  if (ledgerInsertError) throw ledgerInsertError;
+  if (ledgerRow?.id) await updateCooperativeBalanceAfter(context, ledgerRow.id);
+
+  const repaymentRows = Array.from({ length: tenureMonths }, (_, index) => {
+    const installmentNumber = index + 1;
+    const dueDate = addCalendarMonths(startDate, installmentNumber);
+    return {
+      loan_application_id: loan.id,
+      user_id: loan.user_id,
+      installment_number: installmentNumber,
+      due_date: toDateOnly(dueDate),
+      principal_portion: monthlyPrincipal,
+      interest_amount: monthlyInterest,
+      total_due: monthlyTotal,
+      status: 'pending',
+    };
+  });
+
+  const { error: deleteScheduleError } = await context.supabase
+    .from('loan_repayment_schedule')
+    .delete()
+    .eq('loan_application_id', loan.id);
+
+  if (deleteScheduleError) throw deleteScheduleError;
+
+  if (repaymentRows.length > 0) {
+    const { error: scheduleError } = await context.supabase
+      .from('loan_repayment_schedule')
+      .insert(repaymentRows);
+
+    if (scheduleError) throw scheduleError;
+  }
+
+  const scheduleSummary = repaymentRows
+    .map((row) => `Month ${row.installment_number}: ${formatDateDdMmYyyy(new Date(row.due_date))} — ${formatNaira(row.total_due)}`)
+    .join('\n');
+
+  const { error: notificationError } = await context.supabase.from('notifications').insert({
+    user_id: loan.user_id,
+    title: 'Loan Approved — Repayment Schedule',
+    message: `Your loan of ${formatNaira(principal)} has been approved and disbursed. Your monthly repayment is ${formatNaira(monthlyTotal)}.\n\nRepayment Schedule:\n${scheduleSummary}\n\nPlease ensure payments are made on time to avoid penalties. Pay via bank transfer to:\nStanbic IBTC | Smart Save Cooperative Society\nAccount: 0079404511`,
+    is_read: false,
+    type: 'success',
+  });
+
+  if (notificationError) throw notificationError;
+
+  return updatedLoan;
 }
 
 async function adminActivitySafely(
@@ -142,42 +474,16 @@ async function updateApplicationStatus(
   const approvingLoan = table === 'loan_applications' && status === 'approved';
   const approvingInvestment = table === 'investment_applications' && status === 'approved';
   const payload: Record<string, unknown> = {
-    status: approvingLoan || approvingInvestment ? 'active' : status,
+    status: approvingLoan || approvingInvestment ? 'approved' : status,
     reviewed_at: reviewedAt,
     reviewed_by: context.adminId,
   };
   if (reason) payload.rejection_reason = reason;
 
   if (approvingLoan) {
-    const { data: loan, error: lookupError } = await context.supabase
-      .from('loan_applications')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (lookupError) throw lookupError;
-
-    const requestedAmount = parseMoney(loan.amount_requested || loan.amount_approved);
-    const repayment = calculateLoanRepayment(requestedAmount, loan.loan_type, loan.repayment_option);
-    const startDate = new Date();
-    const endDate = addMonths(startDate, repayment.term.months);
-
-    payload.amount_approved = requestedAmount;
-    payload.start_date = startDate.toISOString();
-    payload.end_date = endDate.toISOString();
-    payload.monthly_payment = repayment.monthlyPayment;
-    payload.total_repayable = repayment.totalRepayable;
-    payload.interest_rate = repayment.term.rate;
-    payload.tenure_months = repayment.term.months;
     payload.approved_at = reviewedAt;
   }
-  if (approvingInvestment) {
-    payload.agreed_return_rate = parseMoney(extra.agreedReturnRate);
-    payload.start_date = asString(extra.startDate) || reviewedAt;
-    payload.maturity_date = asString(extra.maturityDate) || null;
-    payload.total_return_amount = parseMoney(extra.totalReturnAmount);
-    payload.approved_at = reviewedAt;
-  }
+  if (approvingInvestment) payload.approved_at = reviewedAt;
 
   const { data, error } = await context.supabase
     .from(table)
@@ -189,25 +495,25 @@ async function updateApplicationStatus(
   if (error) throw error;
 
   const member = await profileByUserId(context, data.user_id);
+  let finalData = data;
+  if (approvingLoan) {
+    finalData = await finalizeApprovedLoan(context, data, member);
+  }
+  if (approvingInvestment) {
+    finalData = await finalizeApprovedInvestment(context, data, member);
+  }
   if (table === 'loan_applications') {
     if (status === 'approved') {
-      await notifyUserSafely(
-        context,
-        data.user_id,
-        'Loan Approved!',
-        `Your ${data.loan_type || 'loan'} loan of ${formatNaira(data.amount_approved || data.amount_requested)} has been approved. Check your loans page for repayment details.`,
-        'success'
-      );
       await resendEmailSafely({
         to: member?.email,
         subject: emailSubjects.loanApproved,
         html: loanApprovedEmail({
           memberName: member?.full_name,
-          loanType: data.loan_type,
-          amount: data.amount_approved || data.amount_requested,
-          monthlyPayment: data.monthly_payment,
-          tenure: data.tenure_months,
-          startDate: data.start_date ? new Date(data.start_date).toLocaleDateString('en-NG') : '',
+          loanType: finalData.loan_type,
+          amount: finalData.approved_amount || finalData.amount_approved || finalData.amount_requested,
+          monthlyPayment: finalData.monthly_repayment_amount || finalData.monthly_payment,
+          tenure: finalData.tenure_months,
+          startDate: finalData.start_date ? new Date(finalData.start_date).toLocaleDateString('en-NG') : '',
         }),
       });
     } else if (status === 'rejected') {
@@ -236,23 +542,16 @@ async function updateApplicationStatus(
       });
     }
   } else if (status === 'approved') {
-    await notifyUserSafely(
-      context,
-      data.user_id,
-      'Investment Active!',
-      `Your ${data.investment_type || 'investment'} of ${formatNaira(data.amount)} is now active. Check your investments page for details.`,
-      'success'
-    );
     await resendEmailSafely({
       to: member?.email,
       subject: emailSubjects.investmentApproved,
       html: investmentApprovedEmail({
         memberName: member?.full_name,
-        investmentType: data.investment_type,
-        amount: data.amount,
-        returnRate: data.agreed_return_rate,
-        maturityDate: data.maturity_date ? new Date(data.maturity_date).toLocaleDateString('en-NG') : '',
-        totalReturn: data.total_return_amount,
+        investmentType: finalData.investment_type,
+        amount: finalData.amount_paid || finalData.amount,
+        returnRate: finalData.agreed_return_rate,
+        maturityDate: finalData.maturity_date ? new Date(finalData.maturity_date).toLocaleDateString('en-NG') : '',
+        totalReturn: finalData.total_return_amount,
       }),
     });
   } else if (status === 'rejected') {
@@ -281,14 +580,14 @@ async function updateApplicationStatus(
     entityType: table === 'loan_applications' ? 'loan' : 'investment',
     entityId: data.id,
     details: {
-      amount: table === 'loan_applications' ? data.amount_approved || data.amount_requested : data.amount,
+      amount: table === 'loan_applications' ? data.amount_approved || data.amount_requested : finalData.amount_paid || finalData.amount,
       type: table === 'loan_applications' ? data.loan_type : data.investment_type,
       status,
       reason,
     },
   });
   await logAdminAction(context, `${table}.${status}`, data.user_id, { id, reason });
-  return data;
+  return finalData;
 }
 
 export async function POST(request: Request) {
@@ -474,6 +773,7 @@ export async function POST(request: Request) {
 
       if (paymentLookupError) throw paymentLookupError;
       let paymentMember: any = null;
+      let paidLoanRepaymentSchedule: any = null;
 
       if (status === 'approved') {
         const paymentType = String(payment.payment_type || '').toLowerCase();
@@ -526,6 +826,94 @@ export async function POST(request: Request) {
           });
 
           if (transactionError) throw transactionError;
+        } else if (paymentType === 'loan_repayment') {
+          paymentMember = await profileByUserId(context, payment.user_id);
+
+          const { data: scheduleRow, error: scheduleLookupError } = await context.supabase
+            .from('loan_repayment_schedule')
+            .select('*')
+            .eq('user_id', payment.user_id)
+            .in('status', ['pending', 'overdue'])
+            .order('due_date', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (scheduleLookupError) throw scheduleLookupError;
+
+          if (scheduleRow) {
+            const { data: updatedSchedule, error: scheduleUpdateError } = await context.supabase
+              .from('loan_repayment_schedule')
+              .update({
+                status: 'paid',
+                paid_at: reviewedAt,
+                payment_submission_id: payment.id,
+              })
+              .eq('id', scheduleRow.id)
+              .select('*')
+              .single();
+
+            if (scheduleUpdateError) throw scheduleUpdateError;
+            paidLoanRepaymentSchedule = updatedSchedule;
+          }
+
+          const { data: ledgerRow, error: ledgerInsertError } = await context.supabase
+            .from('cooperative_ledger')
+            .insert({
+              transaction_type: 'loan_repayment_received',
+              classification: 'asset',
+              reference_id: payment.id,
+              reference_table: 'payment_submissions',
+              amount,
+              direction: 'credit',
+              description: `Loan repayment received from ${paymentMember?.full_name || payment.full_name || paymentMember?.email || 'member'}`,
+              member_id: payment.user_id,
+              processed_by: context.adminId,
+            })
+            .select('*')
+            .single();
+
+          if (ledgerInsertError) throw ledgerInsertError;
+          if (ledgerRow?.id) await updateCooperativeBalanceAfter(context, ledgerRow.id);
+        }
+
+        if (['deposit', 'withdrawal', 'registration', 'investment'].includes(paymentType)) {
+          if (!paymentMember) paymentMember = await profileByUserId(context, payment.user_id);
+          const ledgerConfig =
+            paymentType === 'deposit'
+              ? {
+                  transaction_type: 'deposit_received',
+                  classification: 'liability' as const,
+                  direction: 'credit' as const,
+                  description: `Member deposit - ${paymentMember?.full_name || payment.full_name || paymentMember?.email || 'member'}`,
+                }
+              : paymentType === 'withdrawal'
+                ? {
+                    transaction_type: 'withdrawal_paid',
+                    classification: 'liability' as const,
+                    direction: 'debit' as const,
+                    description: `Withdrawal paid - ${paymentMember?.full_name || payment.full_name || paymentMember?.email || 'member'}`,
+                  }
+                : paymentType === 'registration'
+                  ? {
+                      transaction_type: 'registration_fee',
+                      classification: 'asset' as const,
+                      direction: 'credit' as const,
+                      description: `Registration fee - ${paymentMember?.full_name || payment.full_name || paymentMember?.email || 'member'}`,
+                    }
+                  : {
+                      transaction_type: 'investment_received',
+                      classification: 'liability' as const,
+                      direction: 'credit' as const,
+                      description: `Investment received - ${paymentMember?.full_name || payment.full_name || paymentMember?.email || 'member'}`,
+                    };
+
+          await insertCooperativeLedger(context, {
+            ...ledgerConfig,
+            reference_id: payment.id,
+            reference_table: 'payment_submissions',
+            amount,
+            member_id: payment.user_id,
+          });
         }
       }
 
@@ -547,13 +935,23 @@ export async function POST(request: Request) {
           paymentMember = await profileByUserId(context, reviewedPayment.user_id);
         }
 
-        await notifyUserSafely(
-          context,
-          reviewedPayment.user_id,
-          'Payment Confirmed',
-          `Your payment of ${formatNaira(reviewedPayment.amount)} has been confirmed and your account has been updated.`,
-          'success'
-        );
+        if (String(reviewedPayment.payment_type || '').toLowerCase() === 'loan_repayment') {
+          await notifyUserSafely(
+            context,
+            reviewedPayment.user_id,
+            'Loan Repayment Confirmed',
+            `Your loan repayment of ${formatNaira(reviewedPayment.amount)} for installment ${paidLoanRepaymentSchedule?.installment_number || 'due'} has been received and confirmed.`,
+            'success'
+          );
+        } else {
+          await notifyUserSafely(
+            context,
+            reviewedPayment.user_id,
+            'Payment Confirmed',
+            `Your payment of ${formatNaira(reviewedPayment.amount)} has been confirmed and your account has been updated.`,
+            'success'
+          );
+        }
         await resendEmailSafely({
           to: reviewedPayment.email || paymentMember?.email,
           subject: emailSubjects.paymentConfirmed,
@@ -605,6 +1003,69 @@ export async function POST(request: Request) {
       });
       await logAdminAction(context, `payment.${status}`, reviewedPayment.user_id, { id, paymentType: reviewedPayment.payment_type, reason });
       return NextResponse.json({ success: true, data: reviewedPayment });
+    }
+
+    if (action === 'markInterestPaid') {
+      const id = asString(body.id);
+      if (!id) return jsonError('Interest payout is required.');
+
+      const paidAt = new Date().toISOString();
+      const { data: payout, error: payoutLookupError } = await context.supabase
+        .from('interest_payout_schedule')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (payoutLookupError) throw payoutLookupError;
+      const member = await profileByUserId(context, payout.user_id);
+
+      const { data: paidPayout, error: payoutUpdateError } = await context.supabase
+        .from('interest_payout_schedule')
+        .update({ status: 'paid', paid_at: paidAt })
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (payoutUpdateError) throw payoutUpdateError;
+
+      const amount = parseMoney(paidPayout.amount);
+      const { data: ledgerRow, error: ledgerInsertError } = await context.supabase
+        .from('cooperative_ledger')
+        .insert({
+          transaction_type: 'interest_paid_out',
+          classification: 'asset',
+          reference_id: paidPayout.id,
+          reference_table: 'interest_payout_schedule',
+          amount,
+          direction: 'debit',
+          description: `Interest payout to ${member?.full_name || member?.email || 'member'}`,
+          member_id: paidPayout.user_id,
+          processed_by: context.adminId,
+        })
+        .select('*')
+        .single();
+
+      if (ledgerInsertError) throw ledgerInsertError;
+      if (ledgerRow?.id) await updateCooperativeBalanceAfter(context, ledgerRow.id);
+
+      await notifyUserSafely(
+        context,
+        paidPayout.user_id,
+        'Interest Payment Sent',
+        `Your interest payout of ${formatNaira(amount)} has been processed and transferred to your bank account.`,
+        'success'
+      );
+
+      await adminActivitySafely(context, {
+        actionType: 'interest_paid_out',
+        targetUserId: paidPayout.user_id,
+        targetUserEmail: member?.email,
+        entityType: 'transaction',
+        entityId: paidPayout.id,
+        details: { amount },
+      });
+      await logAdminAction(context, 'interest.paid', paidPayout.user_id, { id, amount });
+      return NextResponse.json({ success: true, data: paidPayout });
     }
 
     if (action === 'grantAdmin' || action === 'suspendMember' || action === 'removeAdmin') {
@@ -662,14 +1123,6 @@ export async function POST(request: Request) {
       const reason = asString(body.reason);
       if (!id || !status) return jsonError('Application and status are required.');
       if (status === 'rejected' && !reason) return jsonError('Rejection reason is required.');
-      if (action === 'investmentStatus' && status === 'approved') {
-        if (!asString(body.startDate) || !asString(body.maturityDate)) {
-          return jsonError('Start date and maturity date are required to approve an investment.');
-        }
-        if (parseMoney(body.agreedReturnRate) <= 0 || parseMoney(body.totalReturnAmount) <= 0) {
-          return jsonError('Agreed return rate and total return amount are required to approve an investment.');
-        }
-      }
 
       const data = await updateApplicationStatus(
         context,

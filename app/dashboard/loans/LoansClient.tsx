@@ -6,7 +6,8 @@ import { ArrowLeft, Banknote, Check, CheckCircle2, ChevronDown, Copy, FileUp, Se
 import SmartSelect from '@/components/ui/SmartSelect';
 import { BANK_DETAILS } from '@/lib/constants/bankDetails';
 import { toOptionalErrorMessage } from '@/lib/error-message';
-import { addMonths, calculateLoanRepayment, repaymentOptionLabel, REPAYMENT_OPTIONS, SMART_SAVE_LOAN_TERMS } from '@/lib/loans/loanTerms';
+import { parseError } from '@/lib/parseError';
+import { addMonths, calculateLoanRepayment, normalizeRepaymentOption, repaymentOptionLabel, REPAYMENT_OPTIONS } from '@/lib/loans/loanTerms';
 import { supabase } from '@/utils/supabase/client';
 
 export interface LoanApplicationProfile {
@@ -17,12 +18,16 @@ export interface LoanApplicationProfile {
 }
 
 export type LoanProductOption = {
+  id: string;
   name: string;
-  interest: string;
-  tenure: string;
-  suitable: string;
-  rate: number;
-  months: number;
+  description: string | null;
+  min_amount: number | string | null;
+  max_amount: number | string | null;
+  monthly_interest_rate: number | string | null;
+  tenure_months: number | string | null;
+  requirements?: string | null;
+  is_active?: boolean | null;
+  sort_order?: number | string | null;
 };
 
 export type LoanApplicationRow = {
@@ -42,14 +47,17 @@ export type LoanApplicationRow = {
   created_at?: string | null;
 };
 
-const loanProducts: LoanProductOption[] = SMART_SAVE_LOAN_TERMS.map((term) => ({
-  name: term.name,
-  interest: `${term.rate}% per month`,
-  tenure: term.tenure,
-  suitable: term.suitable,
-  rate: term.rate,
-  months: term.months,
-}));
+export type LoanRepaymentScheduleRow = {
+  id: string;
+  loan_application_id: string | null;
+  user_id: string | null;
+  installment_number: number | string | null;
+  due_date: string | null;
+  principal_portion?: number | string | null;
+  interest_amount?: number | string | null;
+  total_due: number | string | null;
+  status: string | null;
+};
 
 function parseAmount(value: unknown) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -65,6 +73,40 @@ function formatAmountInput(value: string) {
 
 function formatCurrency(value: unknown) {
   return formatAmount(parseAmount(value));
+}
+
+function formatPercent(rate: unknown) {
+  const parsed = Number(rate);
+  if (!Number.isFinite(parsed)) return '0%';
+  return `${Number((parsed * 100).toFixed(2))}%`;
+}
+
+function formatAmountRange(product: LoanProductOption) {
+  const min = parseAmount(product.min_amount);
+  const max = parseAmount(product.max_amount);
+  if (min > 0 && max > 0) return `${formatAmount(min).replace('.00', '')} - ${formatAmount(max).replace('.00', '')}`;
+  if (min > 0) return `From ${formatAmount(min).replace('.00', '')}`;
+  if (max > 0) return `Up to ${formatAmount(max).replace('.00', '')}`;
+  return 'Amount by review';
+}
+
+function calculateDynamicLoanRepayment(amount: number, product: LoanProductOption | null, repaymentOption: string) {
+  const principal = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  const monthlyRate = product ? Number(product.monthly_interest_rate || 0) : 0;
+  const months = product ? Number(product.tenure_months || 0) : 0;
+  const safeMonths = Number.isFinite(months) && months > 0 ? months : 1;
+  const safeRate = Number.isFinite(monthlyRate) ? Math.max(0, monthlyRate) : 0;
+  const totalInterest = principal * safeRate * safeMonths;
+  const totalRepayable = principal + totalInterest;
+  const interestOnly = normalizeRepaymentOption(repaymentOption) === 'interest_only';
+  const monthlyPayment = interestOnly ? principal * safeRate : totalRepayable / safeMonths;
+  const finalPayment = interestOnly ? principal + monthlyPayment : monthlyPayment;
+
+  return {
+    monthlyPayment,
+    finalPayment,
+    totalRepayable,
+  };
 }
 
 function formatAmount(amount: number): string {
@@ -104,6 +146,20 @@ function applicationStatusClass(status?: string | null) {
   return 'border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37]';
 }
 
+function repaymentStatusLabel(status?: string | null) {
+  const value = String(status || 'pending').toLowerCase();
+  if (value === 'paid') return 'Paid';
+  if (value === 'overdue') return 'Overdue';
+  return 'Due';
+}
+
+function repaymentStatusClass(status?: string | null) {
+  const value = String(status || 'pending').toLowerCase();
+  if (value === 'paid') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-500 dark:text-emerald-300';
+  if (value === 'overdue') return 'border-red-500/25 bg-red-500/10 text-red-500 dark:text-red-300';
+  return 'border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37]';
+}
+
 function isApprovedLoan(loan: LoanApplicationRow) {
   const status = String(loan.status || '').toLowerCase();
   return status === 'active' || status === 'approved';
@@ -131,10 +187,14 @@ function activeLoanProgress(loan: LoanApplicationRow) {
 export default function LoansClient({
   profile,
   initialLoanApplications = [],
+  activeLoanProducts = [],
+  initialRepaymentSchedule = [],
 }: {
   devBypassActive: boolean;
   profile: LoanApplicationProfile;
   initialLoanApplications?: LoanApplicationRow[];
+  activeLoanProducts?: LoanProductOption[];
+  initialRepaymentSchedule?: LoanRepaymentScheduleRow[];
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -151,9 +211,10 @@ export default function LoansClient({
     fullName: profile.full_name || '',
     email: profile.email || '',
     phone: profile.phone || '',
-    loanType: loanProducts[0].name,
+    loanProductId: activeLoanProducts[0]?.id || '',
+    loanType: activeLoanProducts[0]?.name || '',
     amount: '',
-    duration: loanProducts[0].tenure,
+    duration: activeLoanProducts[0]?.tenure_months ? `${activeLoanProducts[0].tenure_months} months` : '',
     repaymentOption: REPAYMENT_OPTIONS[0],
     purpose: '',
     employmentStatus: 'Employed',
@@ -170,16 +231,17 @@ export default function LoansClient({
     urgency: 'Within a month',
     additionalInfo: '',
   });
-  const selectedLoan = loanProducts.find((product) => product.name === form.loanType) || loanProducts[0];
-  const repaymentPreview = calculateLoanRepayment(parseAmount(form.amount), form.loanType, form.repaymentOption);
+  const selectedLoan = activeLoanProducts.find((product) => product.id === form.loanProductId) || activeLoanProducts[0] || null;
+  const repaymentPreview = calculateDynamicLoanRepayment(parseAmount(form.amount), selectedLoan, form.repaymentOption);
   const interestOnly = form.repaymentOption === 'Monthly interest payment only';
 
   function updateField(field: keyof typeof form, value: string) {
+    const nextProduct = field === 'loanProductId' ? activeLoanProducts.find((product) => product.id === value) || null : null;
     setForm((current) => ({
       ...current,
       [field]: value,
-      ...(field === 'loanType'
-        ? { duration: (loanProducts.find((product) => product.name === value) || loanProducts[0]).tenure }
+      ...(field === 'loanProductId' && nextProduct
+        ? { loanType: nextProduct.name, duration: `${nextProduct.tenure_months || 0} months` }
         : {}),
     }));
     setError('');
@@ -191,7 +253,13 @@ export default function LoansClient({
     setError('');
 
     try {
+      if (!selectedLoan) throw new Error('No loan plans are currently available. Check back soon.');
       if (parseAmount(form.amount) <= 0) throw new Error('Enter a valid loan amount.');
+      const requestedAmount = parseAmount(form.amount);
+      const minAmount = parseAmount(selectedLoan.min_amount);
+      const maxAmount = parseAmount(selectedLoan.max_amount);
+      if (minAmount > 0 && requestedAmount < minAmount) throw new Error(`Minimum amount for ${selectedLoan.name} is ${formatAmount(minAmount).replace('.00', '')}.`);
+      if (maxAmount > 0 && requestedAmount > maxAmount) throw new Error(`Maximum amount for ${selectedLoan.name} is ${formatAmount(maxAmount).replace('.00', '')}.`);
       if (!form.guarantorName.trim()) throw new Error('Guarantor name is required.');
       if (!form.guarantorPhone.trim()) throw new Error('Guarantor phone is required.');
       if (!form.purpose.trim()) throw new Error('Loan purpose is required.');
@@ -206,8 +274,7 @@ export default function LoansClient({
       });
       const json = await response.json();
       if (!response.ok || !json.success) {
-        setError(json.error + ' — ' + (json.details || ''));
-        return;
+        throw new Error(json.error || 'Unable to submit loan application.');
       }
       setSubmitted(true);
       setForm((current) => ({
@@ -222,8 +289,8 @@ export default function LoansClient({
         collateralDescription: '',
         additionalInfo: '',
       }));
-    } catch (error: any) {
-      setError(error?.message || JSON.stringify(error) || 'Unable to submit loan application.');
+    } catch (error) {
+      setError(parseError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -287,7 +354,7 @@ export default function LoansClient({
       setRepaymentReference('');
       setRepaymentProofFile(null);
     } catch (error) {
-      setRepaymentError(error instanceof Error ? error.message : 'Unable to submit loan repayment.');
+      setRepaymentError(parseError(error));
     } finally {
       setRepaymentSubmitting(false);
     }
@@ -295,8 +362,22 @@ export default function LoansClient({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-brand-alabaster px-4 py-6 font-sans text-brand-ink dark:bg-[#0A0A0A] dark:text-white sm:py-8">
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.16) 0%, rgba(245, 240, 232, 0) 72%)',
+          }}
+        />
+        <div
+          className="absolute top-[-12%] left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full opacity-[0.24] blur-3xl dark:hidden"
+          style={{
+            background: 'radial-gradient(ellipse, rgba(212,175,55,0.78) 0%, rgba(30,144,255,0.4) 48%, rgba(245,240,232,0) 76%)',
+          }}
+        />
+      </div>
       <div className="absolute inset-0 brand-grid opacity-60" aria-hidden="true" />
-      <div className="absolute left-1/2 top-0 h-[480px] w-[760px] -translate-x-1/2 rounded-full bg-[#D4AF37]/10 blur-3xl" aria-hidden="true" />
+      <div className="absolute left-1/2 top-0 hidden h-[480px] w-[760px] -translate-x-1/2 rounded-full bg-[#D4AF37]/10 blur-3xl dark:block" aria-hidden="true" />
 
       <section className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-8">
         <header className="flex items-center gap-4">
@@ -402,6 +483,41 @@ export default function LoansClient({
           )}
         </section>
 
+        {initialRepaymentSchedule.length > 0 && (
+          <section className="rounded-3xl border border-brand-border bg-brand-ghost p-5 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-white/[0.035]">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">My Loan Repayments</p>
+              <h2 className="mt-1 text-2xl font-black">Repayment schedule</h2>
+            </div>
+            <div className="mt-5 overflow-x-auto rounded-2xl border border-brand-border bg-white dark:border-white/10 dark:bg-white/[0.035]">
+              <table className="w-full min-w-[620px] text-left text-sm">
+                <thead className="border-b border-brand-border text-xs uppercase tracking-widest text-zinc-500 dark:border-white/10 dark:text-white/35">
+                  <tr>
+                    <th className="px-4 py-3 font-black">Installment</th>
+                    <th className="px-4 py-3 font-black">Due Date</th>
+                    <th className="px-4 py-3 text-right font-black">Amount Due</th>
+                    <th className="px-4 py-3 font-black">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border dark:divide-white/10">
+                  {initialRepaymentSchedule.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-4 py-3 font-black">#{row.installment_number || '-'}</td>
+                      <td className="px-4 py-3 font-semibold text-zinc-500 dark:text-white/50">{formatDate(row.due_date)}</td>
+                      <td className="px-4 py-3 text-right font-black text-[#D4AF37]">{formatCurrency(row.total_due)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${repaymentStatusClass(row.status)}`}>
+                          {repaymentStatusLabel(row.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         <section className="rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 p-4 md:p-5">
           <div className="flex items-start gap-2.5 md:gap-3">
             <ShieldCheck className="mt-1 h-5 w-5 shrink-0 text-[#D4AF37] md:h-6 md:w-6" />
@@ -426,30 +542,52 @@ export default function LoansClient({
           </div>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {loanProducts.map((product) => (
-            <article key={product.name} className="rounded-2xl border border-brand-border bg-brand-ghost p-4 shadow-xl shadow-zinc-900/[0.03] dark:border-white/[0.08] dark:bg-white/[0.035] md:p-5">
-              <Banknote className="h-5 w-5 text-[#D4AF37] md:h-6 md:w-6" strokeWidth={1.8} />
-              <h2 className="mt-3 text-lg font-black text-[#D4AF37] md:mt-4 md:text-xl">{product.name}</h2>
-              <div className="mt-3 grid gap-2.5 text-sm leading-5 text-zinc-600 dark:text-white/55 md:mt-4 md:gap-3.5 md:leading-6">
-                <p><span className="font-medium text-zinc-800 dark:text-white/75">Interest:</span> {product.interest}</p>
-                <p><span className="font-medium text-zinc-800 dark:text-white/75">Tenure:</span> {product.tenure}</p>
-                <p><span className="font-medium text-zinc-800 dark:text-white/75">Guarantor:</span> Required</p>
-                <p><span className="font-medium text-zinc-800 dark:text-white/75">Suitable for:</span> {product.suitable}</p>
-              </div>
-              <button type="button" onClick={() => setExpanded(expanded === product.name ? null : product.name)} className="mt-4 inline-flex items-center gap-2 text-sm font-black text-[#D4AF37] md:mt-5">
-                View Full Terms <ChevronDown size={16} className={expanded === product.name ? 'rotate-180 transition' : 'transition'} />
-              </button>
-              {expanded === product.name && (
-                <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm leading-5 text-zinc-500 dark:text-white/45 md:p-4 md:leading-6">
-                  <p>Full interest rate and repayment structure are confirmed during review based on amount, tenure, guarantor quality, and repayment option.</p>
-                  <p className="mt-2">Guarantor requirements: at least one reachable guarantor with a verifiable relationship to the applicant.</p>
-                  <p className="mt-2 font-semibold text-[#D4AF37]">Interest rates are subject to change. Final terms confirmed upon loan approval.</p>
+        {activeLoanProducts.length === 0 ? (
+          <div className="rounded-2xl border border-brand-border bg-brand-ghost px-4 py-5 text-sm font-semibold text-zinc-500 shadow-xl shadow-zinc-900/[0.03] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white/45">
+            No loan plans are currently available. Check back soon.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {activeLoanProducts.map((product) => (
+              <article
+                key={product.id}
+                className={`rounded-2xl border p-4 shadow-xl shadow-zinc-900/[0.03] transition dark:bg-white/[0.035] md:p-5 ${
+                  selectedLoan?.id === product.id
+                    ? 'border-[#D4AF37]/45 bg-[#D4AF37]/10 dark:border-[#D4AF37]/35'
+                    : 'border-brand-border bg-brand-ghost dark:border-white/[0.08]'
+                }`}
+              >
+                <Banknote className="h-5 w-5 text-[#D4AF37] md:h-6 md:w-6" strokeWidth={1.8} />
+                <h2 className="mt-3 text-lg font-black text-[#D4AF37] md:mt-4 md:text-xl">{product.name}</h2>
+                <div className="mt-3 grid gap-2.5 text-sm leading-5 text-zinc-600 dark:text-white/55 md:mt-4 md:gap-3.5 md:leading-6">
+                  <p><span className="font-medium text-zinc-800 dark:text-white/75">Interest:</span> {formatPercent(product.monthly_interest_rate)} monthly interest</p>
+                  <p><span className="font-medium text-zinc-800 dark:text-white/75">Tenure:</span> {Number(product.tenure_months || 0)} months</p>
+                  <p><span className="font-medium text-zinc-800 dark:text-white/75">Amount:</span> {formatAmountRange(product)}</p>
+                  {product.description && <p><span className="font-medium text-zinc-800 dark:text-white/75">Details:</span> {product.description}</p>}
                 </div>
-              )}
-            </article>
-          ))}
-        </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3 md:mt-5">
+                  <button
+                    type="button"
+                    onClick={() => updateField('loanProductId', product.id)}
+                    className="inline-flex rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-black text-brand-ink transition hover:bg-[#F5D06B]"
+                  >
+                    {selectedLoan?.id === product.id ? 'Selected' : 'Select Plan'}
+                  </button>
+                  <button type="button" onClick={() => setExpanded(expanded === product.id ? null : product.id)} className="inline-flex items-center gap-2 text-sm font-black text-[#D4AF37]">
+                    View Full Terms <ChevronDown size={16} className={expanded === product.id ? 'rotate-180 transition' : 'transition'} />
+                  </button>
+                </div>
+                {expanded === product.id && (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm leading-5 text-zinc-500 dark:text-white/45 md:p-4 md:leading-6">
+                    {product.requirements && <p>{product.requirements}</p>}
+                    <p className={product.requirements ? 'mt-2' : ''}>Guarantor requirements: at least one reachable guarantor with a verifiable relationship to the applicant.</p>
+                    <p className="mt-2 font-semibold text-[#D4AF37]">Final approval remains subject to cooperative review.</p>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
 
         <section className="rounded-3xl border border-brand-border bg-brand-ghost p-6 shadow-2xl shadow-zinc-900/[0.04] dark:border-white/[0.08] dark:bg-white/[0.035]">
           {submitted ? (
@@ -469,9 +607,9 @@ export default function LoansClient({
                 <Field label="Full Name" value={form.fullName} onChange={(value) => updateField('fullName', value)} />
                 <Field label="Email" value={form.email} disabled onChange={(value) => updateField('email', value)} />
                 <Field label="Phone Number" value={form.phone} onChange={(value) => updateField('phone', value)} />
-                <SelectField label="Select Loan Type" value={form.loanType} options={loanProducts.map((product) => product.name)} onChange={(value) => updateField('loanType', value)} />
-                <Field label="Interest Rate" value={`${selectedLoan.rate}% per month`} disabled onChange={() => null} />
-                <Field label="Default Tenure" value={selectedLoan.tenure} disabled onChange={() => null} />
+                <Field label="Selected Loan Plan" value={selectedLoan?.name || 'No loan plan available'} disabled onChange={() => null} />
+                <Field label="Interest Rate" value={selectedLoan ? `${formatPercent(selectedLoan.monthly_interest_rate)} per month` : 'Not available'} disabled onChange={() => null} />
+                <Field label="Default Tenure" value={selectedLoan ? `${Number(selectedLoan.tenure_months || 0)} months` : 'Not available'} disabled onChange={() => null} />
                 <Field label="Loan Amount Requested" value={form.amount} placeholder="NGN 250,000" onChange={(value) => updateField('amount', formatAmountInput(value))} />
                 <SelectField label="Employment/Business Status" value={form.employmentStatus} options={['Employed', 'Self-Employed', 'Business Owner', 'Student', 'Other']} onChange={(value) => updateField('employmentStatus', value)} />
                 <SelectField label="Monthly Income Range" value={form.incomeRange} options={['Below NGN50K', 'NGN50K-NGN150K', 'NGN150K-NGN500K', 'Above NGN500K']} onChange={(value) => updateField('incomeRange', value)} />
@@ -509,11 +647,11 @@ export default function LoansClient({
                   <p className="mt-3 text-xs font-semibold leading-5 text-zinc-600 dark:text-white/55">
                     {interestOnly
                       ? `How this works: Each month you pay only the interest (${formatCurrency(repaymentPreview.monthlyPayment)}). In your final month, you pay the interest PLUS your full loan amount back. That final month payment is ${formatCurrency(repaymentPreview.finalPayment)}.`
-                      : `You pay ${formatCurrency(repaymentPreview.monthlyPayment)} every month for ${selectedLoan.months} months until your loan is fully repaid.`}
+                      : `You pay ${formatCurrency(repaymentPreview.monthlyPayment)} every month for ${Number(selectedLoan?.tenure_months || 0)} months until your loan is fully repaid.`}
                   </p>
                 </div>
                 {error && <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-500 md:col-span-2">{toOptionalErrorMessage(error)}</p>}
-                <button type="submit" disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-4 text-sm font-black text-brand-ink transition hover:bg-[#F5D06B] disabled:opacity-60 md:col-span-2">
+                <button type="submit" disabled={isSubmitting || !selectedLoan} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-4 text-sm font-black text-brand-ink transition hover:bg-[#F5D06B] disabled:opacity-60 md:col-span-2">
                   {isSubmitting ? 'Submitting...' : 'Submit Loan Application'} <Send size={16} />
                 </button>
               </form>

@@ -4,11 +4,15 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowDownToLine,
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
   Bell,
   Check,
   Download,
   FileText,
   Loader2,
+  Pencil,
   Plus,
   Receipt,
   RefreshCw,
@@ -31,6 +35,7 @@ type AdminView =
   | 'withdrawals'
   | 'investments'
   | 'transactions'
+  | 'financials'
   | 'kyc'
   | 'announcements'
   | 'settings';
@@ -40,6 +45,7 @@ type AdminData = {
   profiles: any[];
   transactions: any[];
   paymentSubmissions: any[];
+  interestLedger: any[];
   loanApplications: any[];
   loanProducts: any[];
   investmentApplications: any[];
@@ -48,6 +54,10 @@ type AdminData = {
   adminNotes: any[];
   auditLog: any[];
   identityRequests: any[];
+  interestPayoutSchedule: any[];
+  loanRepaymentSchedule: any[];
+  cooperativeLedger: any[];
+  cooperativeFinancialSummary?: any;
 };
 
 type RunAction = (
@@ -63,6 +73,7 @@ const viewTitles: Record<AdminView, { label: string; icon: any }> = {
   withdrawals: { label: 'Withdrawal Requests', icon: ArrowDownToLine },
   investments: { label: 'Investment Applications', icon: TrendingUp },
   transactions: { label: 'Transaction Ledger', icon: Receipt },
+  financials: { label: 'Financials', icon: BarChart3 },
   kyc: { label: 'KYC Approvals', icon: ShieldCheck },
   announcements: { label: 'Announcements', icon: Bell },
   settings: { label: 'Settings', icon: Settings },
@@ -86,6 +97,15 @@ function formatCurrency(value: unknown) {
     style: 'currency',
     currency: 'NGN',
     maximumFractionDigits: 0,
+  }).format(parseMoney(value));
+}
+
+function formatLedgerCurrency(value: unknown) {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(parseMoney(value));
 }
 
@@ -184,6 +204,19 @@ const TRANSACTION_STATUS_FILTERS = [
   'transferred',
 ];
 
+const FINANCIAL_CLASSIFICATION_FILTERS = ['All', 'liability', 'asset'];
+
+const FINANCIAL_TRANSACTION_TYPE_FILTERS = [
+  'All',
+  'deposit_received',
+  'investment_received',
+  'registration_fee',
+  'loan_repayment_received',
+  'interest_paid_out',
+  'loan_disbursed',
+  'withdrawal_paid',
+];
+
 function csvEscape(value: unknown) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
@@ -211,6 +244,27 @@ function statusBadge(status?: string | null) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black capitalize ${className}`}>{status || 'pending'}</span>;
 }
 
+function dueStatusBadge(status?: string | null) {
+  const value = normalize(status || 'pending');
+  const label = value === 'paid' ? 'Paid' : value === 'overdue' ? 'Overdue' : 'Due';
+  const className =
+    value === 'paid'
+      ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+      : value === 'overdue'
+        ? 'border-red-500/25 bg-red-500/10 text-red-300'
+        : 'border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37]';
+
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${className}`}>{label}</span>;
+}
+
+function ledgerClassification(row: any) {
+  const explicit = normalize(row?.classification);
+  if (explicit === 'asset' || explicit === 'liability') return explicit;
+  const type = normalize(row?.transaction_type);
+  if (type === 'deposit_received' || type === 'investment_received') return 'liability';
+  return 'asset';
+}
+
 function Panel({
   title,
   icon: Icon,
@@ -231,15 +285,15 @@ function Panel({
   const iconPixelSize = iconSize === 'large' ? 22 : 18;
 
   return (
-    <section className="rounded-lg border border-white/10 bg-white/[0.035]">
-      <div className="flex flex-row items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+    <section className="admin-panel rounded-lg border border-white/10 bg-white/[0.035]">
+      <div className="admin-panel-header flex flex-row items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
         <div className="flex min-w-0 items-center gap-3">
           {Icon && (
             <span className={`inline-flex ${iconBoxClass} items-center justify-center rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37]`}>
               <Icon size={iconPixelSize} />
             </span>
           )}
-          <h2 className="min-w-0 text-lg font-black">{title}</h2>
+          <h2 className="admin-panel-title min-w-0 text-lg font-black">{title}</h2>
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
@@ -261,13 +315,77 @@ function StatCard({
   subtitle?: string;
   pulse?: boolean;
 }) {
-  const color = tone === 'red' ? 'text-red-300' : tone === 'green' ? 'text-emerald-300' : 'text-[#D4AF37]';
+  const color = tone === 'red' ? 'text-red-300' : tone === 'green' ? 'text-[#8BC34A]' : 'text-[#D4AF37]';
+  const cardTone =
+    tone === 'green'
+      ? 'border-[#8BC34A]/25 bg-[#8BC34A]/10'
+      : 'border-white/10 bg-white/[0.035]';
 
   return (
-    <div className={`min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-3 md:p-5 ${pulse ? 'admin-pending-card-pulse' : ''}`}>
-      <p className="text-xs font-black uppercase tracking-widest text-white/40">{label}</p>
+    <div className={`admin-stat-card min-w-0 rounded-lg border p-3 md:p-5 ${cardTone} ${pulse ? 'admin-pending-card-pulse' : ''}`}>
+      <p className="admin-stat-label text-xs font-black uppercase tracking-widest text-white/40">{label}</p>
       <p className={`mt-3 min-w-0 break-words text-xl font-black leading-tight sm:text-2xl ${color}`}>{value}</p>
-      {subtitle && <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/35">{subtitle}</p>}
+      {subtitle && <p className="admin-stat-label mt-2 text-xs font-black uppercase tracking-widest text-white/35">{subtitle}</p>}
+    </div>
+  );
+}
+
+function FinancialSummaryCard({
+  label,
+  value,
+  subtext,
+  accent,
+  valueClassName = 'text-[#D4AF37]',
+}: {
+  label: string;
+  value: string;
+  subtext: string;
+  accent: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="admin-stat-card min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-4 shadow-xl shadow-black/10" style={{ borderTop: `4px solid ${accent}` }}>
+      <p className="admin-stat-label text-xs font-black uppercase tracking-widest text-white/40">{label}</p>
+      <p className={`mt-3 min-w-0 break-words text-2xl font-black leading-tight ${valueClassName}`}>{value}</p>
+      <p className="admin-muted mt-2 text-xs font-semibold text-white/40">{subtext}</p>
+    </div>
+  );
+}
+
+function FinancialBreakdownTable({
+  rows,
+  totalLabel,
+  totalValue,
+}: {
+  rows: Array<{ label: string; value: number; note: string; deduction?: boolean }>;
+  totalLabel: string;
+  totalValue: number;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="admin-table w-full min-w-[680px] text-left text-sm">
+        <tbody className="divide-y divide-white/10">
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td className="px-4 py-4">
+                <p className="font-black">{row.label}</p>
+                <p className="admin-muted mt-1 text-xs font-semibold text-white/40">{row.note}</p>
+              </td>
+              <td className={`px-4 py-4 text-right font-black ${row.deduction ? 'text-red-300' : 'text-[#D4AF37]'}`}>
+                {formatLedgerCurrency(row.value)}
+              </td>
+            </tr>
+          ))}
+          <tr>
+            <td className="px-4 py-4">
+              <p className="font-black uppercase tracking-widest">{totalLabel}</p>
+            </td>
+            <td className={`px-4 py-4 text-right text-lg font-black ${totalValue < 0 ? 'text-red-300' : 'text-[#8BC34A]'}`}>
+              {formatLedgerCurrency(totalValue)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -295,7 +413,7 @@ function ToolbarInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 w-full rounded-lg border border-white/10 bg-white/[0.04] py-2 pl-10 pr-3 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50"
+        className="admin-input h-11 w-full rounded-lg border border-white/10 bg-white/[0.04] py-2 pl-10 pr-3 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50"
       />
     </label>
   );
@@ -316,7 +434,7 @@ function SelectControl({
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className={`h-11 rounded-lg border border-white/10 bg-[#111] px-3 text-sm font-black text-white outline-none focus:border-[#D4AF37]/50 ${className}`}
+      className={`admin-input h-11 rounded-lg border border-white/10 bg-[#111] px-3 text-sm font-black text-white outline-none focus:border-[#D4AF37]/50 ${className}`}
     >
       {options.map((option) => (
         <option key={option} value={option}>
@@ -333,20 +451,22 @@ function ActionButton({
   tone = 'amber',
   disabled = false,
   type = 'button',
+  className: extraClassName = '',
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   tone?: 'amber' | 'red' | 'neutral' | 'green';
   disabled?: boolean;
   type?: 'button' | 'submit';
+  className?: string;
 }) {
   const className =
     tone === 'red'
-      ? 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15'
+      ? 'admin-action-red border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15'
       : tone === 'green'
-        ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/15'
+        ? 'admin-action-green border-emerald-400/25 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/15'
         : tone === 'neutral'
-          ? 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]'
+          ? 'admin-action-neutral border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]'
           : 'border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37]/15';
 
   return (
@@ -354,7 +474,7 @@ function ActionButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`admin-action-button inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${className} ${extraClassName}`}
     >
       {children}
     </button>
@@ -363,8 +483,8 @@ function ActionButton({
 
 function DataTable({ children, minWidth = 860 }: { children: React.ReactNode; minWidth?: number }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm" style={{ minWidth }}>
+    <div className="admin-table-wrap overflow-x-auto">
+      <table className="admin-table w-full text-left text-sm" style={{ minWidth }}>
         {children}
       </table>
     </div>
@@ -372,7 +492,701 @@ function DataTable({ children, minWidth = 860 }: { children: React.ReactNode; mi
 }
 
 function EmptyState({ label }: { label: string }) {
-  return <div className="px-5 py-16 text-center text-sm font-semibold text-white/40">{label}</div>;
+  return <div className="admin-muted px-5 py-16 text-center text-sm font-semibold text-white/40">{label}</div>;
+}
+
+type LoanProduct = {
+  id: string;
+  name: string | null;
+  description: string | null;
+  min_amount: number | string | null;
+  max_amount: number | string | null;
+  monthly_interest_rate: number | string | null;
+  tenure_months: number | string | null;
+  requirements: string | null;
+  is_active: boolean | null;
+  sort_order: number | string | null;
+};
+
+type InvestmentProduct = {
+  id: string;
+  name: string | null;
+  description: string | null;
+  product_type: 'fixed' | 'savings' | string | null;
+  min_amount: number | string | null;
+  max_amount: number | string | null;
+  monthly_rate: number | string | null;
+  total_return_rate: number | string | null;
+  tenure_months: number | string | null;
+  payout_interval_months: number | string | null;
+  is_active: boolean | null;
+  sort_order: number | string | null;
+};
+
+const inputClass =
+  'admin-input h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50';
+const textareaClass =
+  'admin-input min-h-[96px] rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50';
+const labelClass = 'grid gap-2';
+const labelTextClass = 'admin-label-text text-xs font-black uppercase tracking-widest text-white/35';
+
+function formatPercent(value: unknown) {
+  const rate = Number(value);
+  if (!Number.isFinite(rate)) return 'Not set';
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
+
+function productStatusBadge(active?: boolean | null) {
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${
+        active ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-white/45'
+      }`}
+    >
+      {active ? 'Active' : 'Disabled'}
+    </span>
+  );
+}
+
+function toFormNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return '';
+  return String(value);
+}
+
+function toPercentInput(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '';
+  return String(Number((parsed * 100).toFixed(4)));
+}
+
+function normalizeAmountInput(value: string) {
+  const digits = value.replace(/[^\d.]/g, '');
+  return digits === '' ? null : Number(digits);
+}
+
+function formatAmountFormValue(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('en-NG');
+}
+
+function normalizeRateInput(value: string) {
+  return value === '' ? null : Number(value) / 100;
+}
+
+async function readAdminProductResponse(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.success) throw new Error(payload?.error || fallback);
+  return payload.data;
+}
+
+function LoanProductsManager() {
+  const emptyForm = {
+    name: '',
+    description: '',
+    min_amount: '',
+    max_amount: '',
+    monthly_interest_rate: '',
+    tenure_months: '',
+    requirements: '',
+    sort_order: '0',
+    is_active: true,
+  };
+  const [products, setProducts] = useState<LoanProduct[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editing, setEditing] = useState<LoanProduct | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savingProduct, setSavingProduct] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function loadProducts() {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await fetch('/api/admin/loan-products', { cache: 'no-store' });
+      const data = await readAdminProductResponse(response, 'Unable to load loan plans.');
+      setProducts((data || []) as LoanProduct[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load loan plans.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  function openCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setFormOpen(true);
+    setError('');
+    setNotice('');
+  }
+
+  function openEdit(product: LoanProduct) {
+    setEditing(product);
+    setForm({
+      name: product.name || '',
+      description: product.description || '',
+      min_amount: toFormNumber(product.min_amount),
+      max_amount: toFormNumber(product.max_amount),
+      monthly_interest_rate: toPercentInput(product.monthly_interest_rate),
+      tenure_months: toFormNumber(product.tenure_months),
+      requirements: product.requirements || '',
+      sort_order: toFormNumber(product.sort_order) || '0',
+      is_active: product.is_active !== false,
+    });
+    setFormOpen(true);
+    setError('');
+    setNotice('');
+  }
+
+  function closeModal() {
+    setEditing(null);
+    setForm(emptyForm);
+    setFormOpen(false);
+  }
+
+  function updateForm(field: keyof typeof form, value: string | boolean) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function payloadFromForm(active = form.is_active) {
+    return {
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      min_amount: normalizeAmountInput(form.min_amount),
+      max_amount: normalizeAmountInput(form.max_amount),
+      monthly_interest_rate: normalizeRateInput(form.monthly_interest_rate),
+      tenure_months: Number(form.tenure_months),
+      requirements: form.requirements.trim() || null,
+      sort_order: Number(form.sort_order || 0),
+      is_active: active,
+    };
+  }
+
+  async function saveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingProduct(editing?.id || 'new');
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch('/api/admin/loan-products', {
+        method: editing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editing ? { id: editing.id, ...payloadFromForm() } : payloadFromForm()),
+      });
+      await readAdminProductResponse(response, editing ? 'Unable to update loan plan.' : 'Unable to create loan plan.');
+      setNotice(editing ? 'Loan plan updated.' : 'Loan plan created.');
+      closeModal();
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save loan plan.');
+    } finally {
+      setSavingProduct('');
+    }
+  }
+
+  async function toggleProduct(product: LoanProduct) {
+    const nextActive = product.is_active !== true;
+    setSavingProduct(product.id);
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch('/api/admin/loan-products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: product.id, is_active: nextActive }),
+      });
+      await readAdminProductResponse(response, 'Unable to update loan plan.');
+      setNotice(nextActive ? 'Loan plan activated.' : 'Loan plan disabled.');
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update loan plan.');
+    } finally {
+      setSavingProduct('');
+    }
+  }
+
+  return (
+    <>
+      <Panel
+        title="Loan Plans"
+        icon={FileText}
+        action={
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={openCreate}
+              aria-label="New loan plan"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37] transition hover:bg-[#D4AF37]/15 sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-black"
+            >
+              <Plus size={14} />
+              <span className="hidden sm:inline">New Loan Plan</span>
+            </button>
+            <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md border border-white/10 bg-[#111111] px-2 py-1 text-[10px] font-bold text-white opacity-0 shadow-xl transition group-hover:opacity-100 group-focus-within:opacity-100 sm:hidden">
+              New loan plan
+            </span>
+          </div>
+        }
+      >
+        {error && <p className="mx-4 mt-4 rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</p>}
+        {notice && <p className="mx-4 mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-300">{notice}</p>}
+        {loading ? (
+          <div className="flex min-h-[180px] items-center justify-center">
+            <Loader2 className="h-7 w-7 animate-spin text-[#D4AF37]" />
+          </div>
+        ) : products.length === 0 ? (
+          <EmptyState label="No loan plans found." />
+        ) : (
+          <DataTable minWidth={980}>
+            <thead className="border-b border-white/10 text-xs uppercase tracking-widest text-white/35">
+              <tr>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3 text-right">Min Amount</th>
+                <th className="px-4 py-3 text-right">Max Amount</th>
+                <th className="px-4 py-3">Monthly Rate</th>
+                <th className="px-4 py-3">Tenure</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {products.map((product) => (
+                <tr key={product.id}>
+                  <td className="px-4 py-3">
+                    <p className="font-black">{product.name || 'Untitled product'}</p>
+                    {product.description && <p className="mt-1 max-w-sm text-xs leading-5 text-white/40">{product.description}</p>}
+                  </td>
+                  <td className="px-4 py-3 text-right font-black text-[#D4AF37]">{formatCurrency(product.min_amount)}</td>
+                  <td className="px-4 py-3 text-right text-white/60">{product.max_amount ? formatCurrency(product.max_amount) : 'No limit'}</td>
+                  <td className="px-4 py-3 text-white/60">{formatPercent(product.monthly_interest_rate)}</td>
+                  <td className="px-4 py-3 text-white/60">{product.tenure_months || 0} months</td>
+                  <td className="px-4 py-3">{productStatusBadge(product.is_active)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex min-w-[210px] flex-wrap gap-2">
+                      <ActionButton disabled={savingProduct === product.id} tone={product.is_active ? 'neutral' : 'green'} onClick={() => toggleProduct(product)}>
+                        {product.is_active ? <X size={13} /> : <Check size={13} />}
+                        {product.is_active ? 'Disable' : 'Activate'}
+                      </ActionButton>
+                      <ActionButton disabled={savingProduct === product.id} onClick={() => openEdit(product)}>
+                        <Pencil size={13} />
+                        Edit
+                      </ActionButton>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </Panel>
+
+      {formOpen && (
+        <div className="fixed inset-0 z-[90]">
+          <button type="button" aria-label="Close loan plan form" onClick={closeModal} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="absolute left-1/2 top-1/2 max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-white/10 bg-[#0A0A0A] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Loan Plans</p>
+                <h3 className="mt-1 text-xl font-black">{editing ? 'Edit Loan Plan' : 'New Loan Plan'}</h3>
+              </div>
+              <ActionButton onClick={closeModal} tone="neutral"><X size={14} /></ActionButton>
+            </div>
+            <form onSubmit={saveProduct} className="grid gap-4 p-4 md:grid-cols-2">
+              <label className={labelClass}>
+                <span className={labelTextClass}>Name</span>
+                <input required value={form.name} onChange={(event) => updateForm('name', event.target.value)} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Min Amount</span>
+                <input required inputMode="numeric" value={form.min_amount} onChange={(event) => updateForm('min_amount', formatAmountFormValue(event.target.value))} className={inputClass} />
+              </label>
+              <label className={`${labelClass} md:col-span-2`}>
+                <span className={labelTextClass}>Description</span>
+                <textarea value={form.description} onChange={(event) => updateForm('description', event.target.value)} className={textareaClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Max Amount</span>
+                <input inputMode="numeric" value={form.max_amount} onChange={(event) => updateForm('max_amount', formatAmountFormValue(event.target.value))} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Monthly Interest Rate (%)</span>
+                <input required type="number" min="0" step="0.01" value={form.monthly_interest_rate} onChange={(event) => updateForm('monthly_interest_rate', event.target.value)} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Tenure in Months</span>
+                <input required type="number" min="1" value={form.tenure_months} onChange={(event) => updateForm('tenure_months', event.target.value)} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Sort Order</span>
+                <input type="number" value={form.sort_order} onChange={(event) => updateForm('sort_order', event.target.value)} className={inputClass} />
+              </label>
+              <label className={`${labelClass} md:col-span-2`}>
+                <span className={labelTextClass}>Requirements / Eligibility</span>
+                <textarea value={form.requirements} onChange={(event) => updateForm('requirements', event.target.value)} className={textareaClass} />
+              </label>
+              <label className="grid gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 md:col-span-2">
+                <span className="flex items-center gap-3">
+                  <input type="checkbox" checked={form.is_active} onChange={(event) => updateForm('is_active', event.target.checked)} className="h-4 w-4 accent-[#D4AF37]" />
+                  <span className="text-sm font-black text-white">Active</span>
+                </span>
+                <span className="pl-7 text-xs font-medium leading-5 text-white/45">
+                  {editing ? (
+                    'Uncheck to hide this plan from members without deleting it.'
+                  ) : (
+                    <>
+                      Check this to make the plan immediately visible to members.
+                      <br className="sm:hidden" /> Uncheck to save as a draft and publish later.
+                    </>
+                  )}
+                </span>
+              </label>
+              <ActionButton type="submit" disabled={savingProduct !== ''}>
+                {savingProduct ? <Loader2 size={14} className="animate-spin" /> : editing ? <Check size={14} /> : <Plus size={14} />}
+                {editing ? 'Save' : 'Create'}
+              </ActionButton>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function InvestmentProductsManager() {
+  const emptyForm = {
+    name: '',
+    description: '',
+    product_type: 'fixed',
+    min_amount: '',
+    max_amount: '',
+    monthly_rate: '',
+    total_return_rate: '',
+    tenure_months: '',
+    payout_interval_months: '',
+    sort_order: '0',
+    is_active: true,
+  };
+  const [products, setProducts] = useState<InvestmentProduct[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editing, setEditing] = useState<InvestmentProduct | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savingProduct, setSavingProduct] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function loadProducts() {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await fetch('/api/admin/investment-products', { cache: 'no-store' });
+      const data = await readAdminProductResponse(response, 'Unable to load investment plans.');
+      setProducts((data || []) as InvestmentProduct[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load investment plans.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ ...emptyForm, tenure_months: '12', payout_interval_months: '13' });
+    setFormOpen(true);
+    setError('');
+    setNotice('');
+  }
+
+  function openEdit(product: InvestmentProduct) {
+    const type = product.product_type === 'savings' ? 'savings' : 'fixed';
+    setEditing(product);
+    setForm({
+      name: product.name || '',
+      description: product.description || '',
+      product_type: type,
+      min_amount: toFormNumber(product.min_amount),
+      max_amount: toFormNumber(product.max_amount),
+      monthly_rate: toPercentInput(product.monthly_rate),
+      total_return_rate: toPercentInput(product.total_return_rate),
+      tenure_months: toFormNumber(product.tenure_months) || (type === 'savings' ? '12' : ''),
+      payout_interval_months: toFormNumber(product.payout_interval_months) || (type === 'savings' ? '13' : ''),
+      sort_order: toFormNumber(product.sort_order) || '0',
+      is_active: product.is_active !== false,
+    });
+    setFormOpen(true);
+    setError('');
+    setNotice('');
+  }
+
+  function closeModal() {
+    setEditing(null);
+    setForm(emptyForm);
+    setFormOpen(false);
+  }
+
+  function updateForm(field: keyof typeof form, value: string | boolean) {
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === 'product_type' && value === 'savings') {
+        next.tenure_months = next.tenure_months || '12';
+        next.payout_interval_months = next.payout_interval_months || '13';
+      }
+      return next;
+    });
+  }
+
+  function payloadFromForm(active = form.is_active) {
+    const fixed = form.product_type === 'fixed';
+    return {
+      name: form.name.trim(),
+      description: form.description.trim() || null,
+      product_type: fixed ? 'fixed' : 'savings',
+      min_amount: normalizeAmountInput(form.min_amount),
+      max_amount: normalizeAmountInput(form.max_amount),
+      monthly_rate: fixed ? normalizeRateInput(form.monthly_rate) : null,
+      total_return_rate: fixed ? null : normalizeRateInput(form.total_return_rate),
+      tenure_months: Number(form.tenure_months),
+      payout_interval_months: Number(form.payout_interval_months),
+      sort_order: Number(form.sort_order || 0),
+      is_active: active,
+    };
+  }
+
+  async function saveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingProduct(editing?.id || 'new');
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch('/api/admin/investment-products', {
+        method: editing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editing ? { id: editing.id, ...payloadFromForm() } : payloadFromForm()),
+      });
+      await readAdminProductResponse(response, editing ? 'Unable to update investment plan.' : 'Unable to create investment plan.');
+      setNotice(editing ? 'Investment plan updated.' : 'Investment plan created.');
+      closeModal();
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save investment plan.');
+    } finally {
+      setSavingProduct('');
+    }
+  }
+
+  async function toggleProduct(product: InvestmentProduct) {
+    const nextActive = product.is_active !== true;
+    setSavingProduct(product.id);
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch('/api/admin/investment-products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: product.id, is_active: nextActive }),
+      });
+      await readAdminProductResponse(response, 'Unable to update investment plan.');
+      setNotice(nextActive ? 'Investment plan activated.' : 'Investment plan disabled.');
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update investment plan.');
+    } finally {
+      setSavingProduct('');
+    }
+  }
+
+  return (
+    <>
+      <Panel
+        title="Investment Plans"
+        icon={TrendingUp}
+        iconSize="large"
+        action={
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={openCreate}
+              aria-label="Add investment plan"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 text-[#D4AF37] transition hover:bg-[#D4AF37]/15 sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-black"
+            >
+              <Plus size={14} />
+              <span className="hidden sm:inline">New Investment Plan</span>
+            </button>
+            <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md border border-white/10 bg-[#111111] px-2 py-1 text-[10px] font-bold text-white opacity-0 shadow-xl transition group-hover:opacity-100 group-focus-within:opacity-100 sm:hidden">
+              Add investment plan
+            </span>
+          </div>
+        }
+      >
+        {error && <p className="mx-4 mt-4 rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</p>}
+        {notice && <p className="mx-4 mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-300">{notice}</p>}
+        {loading ? (
+          <div className="flex min-h-[180px] items-center justify-center">
+            <Loader2 className="h-7 w-7 animate-spin text-[#D4AF37]" />
+          </div>
+        ) : products.length === 0 ? (
+          <EmptyState label="No investment plans found." />
+        ) : (
+          <DataTable minWidth={1120}>
+            <thead className="border-b border-white/10 text-xs uppercase tracking-widest text-white/35">
+              <tr>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3 text-right">Min Amount</th>
+                <th className="px-4 py-3 text-right">Max Amount</th>
+                <th className="px-4 py-3">Rate</th>
+                <th className="px-4 py-3">Tenure</th>
+                <th className="px-4 py-3">Payout</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {products.map((product) => {
+                const fixed = product.product_type !== 'savings';
+                return (
+                  <tr key={product.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-black">{product.name || 'Untitled product'}</p>
+                      {product.description && <p className="mt-1 max-w-sm text-xs leading-5 text-white/40">{product.description}</p>}
+                    </td>
+                    <td className="px-4 py-3 capitalize text-white/60">{fixed ? 'fixed' : 'savings'}</td>
+                    <td className="px-4 py-3 text-right font-black text-[#D4AF37]">{formatCurrency(product.min_amount)}</td>
+                    <td className="px-4 py-3 text-right text-white/60">{product.max_amount ? formatCurrency(product.max_amount) : 'No limit'}</td>
+                    <td className="px-4 py-3 text-white/60">{formatPercent(fixed ? product.monthly_rate : product.total_return_rate)}</td>
+                    <td className="px-4 py-3 text-white/60">{product.tenure_months || 0} months</td>
+                    <td className="px-4 py-3 text-white/60">{product.payout_interval_months || 0} months</td>
+                    <td className="px-4 py-3">{productStatusBadge(product.is_active)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex min-w-[210px] flex-wrap gap-2">
+                        <ActionButton disabled={savingProduct === product.id} tone={product.is_active ? 'neutral' : 'green'} onClick={() => toggleProduct(product)}>
+                          {product.is_active ? <X size={13} /> : <Check size={13} />}
+                          {product.is_active ? 'Disable' : 'Activate'}
+                        </ActionButton>
+                        <ActionButton disabled={savingProduct === product.id} onClick={() => openEdit(product)}>
+                          <Pencil size={13} />
+                          Edit
+                        </ActionButton>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
+        )}
+      </Panel>
+
+      {formOpen && (
+        <div className="fixed inset-0 z-[90]">
+          <button type="button" aria-label="Close investment plan form" onClick={closeModal} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="absolute left-1/2 top-1/2 max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-white/10 bg-[#0A0A0A] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Investment Plans</p>
+                <h3 className="mt-1 text-xl font-black">{editing ? 'Edit Investment Plan' : 'New Investment Plan'}</h3>
+              </div>
+              <ActionButton onClick={closeModal} tone="neutral"><X size={14} /></ActionButton>
+            </div>
+            <form onSubmit={saveProduct} className="grid gap-4 p-4 md:grid-cols-2">
+              <label className={labelClass}>
+                <span className={labelTextClass}>Name</span>
+                <input required value={form.name} onChange={(event) => updateForm('name', event.target.value)} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Plan Type</span>
+                <select value={form.product_type} onChange={(event) => updateForm('product_type', event.target.value)} className={`${inputClass} bg-[#FDFAF5] text-[#1A1410] dark:bg-[#111] dark:text-white`}>
+                  <option value="fixed" className="bg-[#FDFAF5] text-[#1A1410] dark:bg-[#111] dark:text-white">fixed</option>
+                  <option value="savings" className="bg-[#FDFAF5] text-[#1A1410] dark:bg-[#111] dark:text-white">savings</option>
+                </select>
+              </label>
+              <label className={`${labelClass} md:col-span-2`}>
+                <span className={labelTextClass}>Description</span>
+                <textarea value={form.description} onChange={(event) => updateForm('description', event.target.value)} className={textareaClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Min Amount</span>
+                <input required inputMode="numeric" value={form.min_amount} onChange={(event) => updateForm('min_amount', formatAmountFormValue(event.target.value))} className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                <span className={labelTextClass}>Max Amount</span>
+                <input inputMode="numeric" value={form.max_amount} onChange={(event) => updateForm('max_amount', formatAmountFormValue(event.target.value))} className={inputClass} />
+              </label>
+              {form.product_type === 'fixed' ? (
+                <>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Monthly Rate (%)</span>
+                    <input required type="number" min="0" step="0.01" value={form.monthly_rate} onChange={(event) => updateForm('monthly_rate', event.target.value)} className={inputClass} />
+                  </label>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Tenure in Months</span>
+                    <input required type="number" min="1" value={form.tenure_months} onChange={(event) => updateForm('tenure_months', event.target.value)} className={inputClass} />
+                  </label>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Payout Interval in Months</span>
+                    <input required type="number" min="1" value={form.payout_interval_months} onChange={(event) => updateForm('payout_interval_months', event.target.value)} className={inputClass} />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Total Return Rate (%)</span>
+                    <input required type="number" min="0" step="0.01" value={form.total_return_rate} onChange={(event) => updateForm('total_return_rate', event.target.value)} className={inputClass} />
+                  </label>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Tenure in Months</span>
+                    <input required type="number" min="1" value={form.tenure_months} onChange={(event) => updateForm('tenure_months', event.target.value)} className={inputClass} />
+                  </label>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>Payout at Month</span>
+                    <input required type="number" min="1" value={form.payout_interval_months} onChange={(event) => updateForm('payout_interval_months', event.target.value)} className={inputClass} />
+                  </label>
+                </>
+              )}
+              <label className={labelClass}>
+                <span className={labelTextClass}>Sort Order</span>
+                <input type="number" value={form.sort_order} onChange={(event) => updateForm('sort_order', event.target.value)} className={inputClass} />
+              </label>
+              <label className="grid gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-3 md:col-span-2">
+                <span className="flex items-center gap-3">
+                  <input type="checkbox" checked={form.is_active} onChange={(event) => updateForm('is_active', event.target.checked)} className="h-4 w-4 accent-[#D4AF37]" />
+                  <span className="text-sm font-black text-white">Active</span>
+                </span>
+                <span className="pl-7 text-xs font-medium leading-5 text-white/45">
+                  {editing ? (
+                    'Uncheck to hide this plan from members without deleting it.'
+                  ) : (
+                    <>
+                      Check this to make the plan immediately visible to members.
+                      <br className="sm:hidden" /> Uncheck to save as a draft and publish later.
+                    </>
+                  )}
+                </span>
+              </label>
+              <ActionButton type="submit" disabled={savingProduct !== ''}>
+                {savingProduct ? <Loader2 size={14} className="animate-spin" /> : editing ? <Check size={14} /> : <Plus size={14} />}
+                {editing ? 'Save' : 'Create'}
+              </ActionButton>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function AdminDashboardClient({ view }: { view: AdminView }) {
@@ -495,16 +1309,16 @@ export default function AdminDashboardClient({ view }: { view: AdminView }) {
     <div className="space-y-6">
       <div className="flex flex-row items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-[#8BC34A]">Admin control center</p>
+          <p className="admin-control-label text-xs font-black uppercase tracking-widest text-[#8BC34A]">Admin control center</p>
           <div className="mt-2 flex items-center gap-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-[#8BC34A]/25 bg-[#8BC34A]/10 text-[#8BC34A]">
               <ViewIcon size={22} />
             </span>
-            <h2 className="text-2xl font-black sm:text-3xl">{title.label}</h2>
+            <h2 className="admin-heading text-2xl font-black sm:text-3xl">{title.label}</h2>
           </div>
         </div>
         <div className="group relative shrink-0">
-          <ActionButton onClick={loadData} tone="neutral" disabled={loading}>
+          <ActionButton onClick={loadData} tone="neutral" disabled={loading} className="admin-refresh-button">
             {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
             <span className="hidden sm:inline">Refresh</span>
           </ActionButton>
@@ -521,12 +1335,13 @@ export default function AdminDashboardClient({ view }: { view: AdminView }) {
       )}
       {notice && <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-300">{notice}</div>}
 
-      {view === 'overview' && <Overview data={data} totalPendingActions={totalPendingActions} />}
+      {view === 'overview' && <Overview data={data} totalPendingActions={totalPendingActions} runAction={runAction} saving={saving} />}
       {view === 'members' && <Members data={data} runAction={runAction} saving={saving} />}
       {view === 'loans' && <Loans data={data} runAction={runAction} saving={saving} />}
       {view === 'withdrawals' && <Withdrawals data={data} runAction={runAction} saving={saving} />}
       {view === 'investments' && <Investments data={data} runAction={runAction} saving={saving} />}
       {view === 'transactions' && <Transactions data={data} runAction={runAction} saving={saving} />}
+      {view === 'financials' && <Financials data={data} />}
       {view === 'kyc' && <Kyc data={data} runAction={runAction} saving={saving} />}
       {view === 'announcements' && <Announcements data={data} runAction={runAction} saving={saving} />}
       {view === 'settings' && <SettingsView data={data} runAction={runAction} saving={saving} />}
@@ -534,7 +1349,17 @@ export default function AdminDashboardClient({ view }: { view: AdminView }) {
   );
 }
 
-function Overview({ data, totalPendingActions }: { data: AdminData; totalPendingActions: number }) {
+function Overview({
+  data,
+  totalPendingActions,
+  runAction,
+  saving,
+}: {
+  data: AdminData;
+  totalPendingActions: number;
+  runAction: RunAction;
+  saving: string;
+}) {
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const profiles = data.profiles || [];
   const members = profiles.filter((profile) => !profile.is_admin);
@@ -544,8 +1369,27 @@ function Overview({ data, totalPendingActions }: { data: AdminData; totalPending
     .filter((transaction) => transaction.type === 'deposit' && ['approved', 'success'].includes(transaction.status))
     .filter((transaction) => new Date(transaction.created_at) >= monthStart)
     .reduce((sum, transaction) => sum + parseMoney(transaction.amount), 0);
-  const balance = members.reduce((sum, profile) => sum + parseMoney(profile.balance), 0);
+  const ledgerBalance = (data.cooperativeLedger || []).reduce((sum, row) => {
+    const amount = parseMoney(row.amount);
+    return String(row.direction || '').toLowerCase() === 'debit' ? sum - amount : sum + amount;
+  }, 0);
+  const cooperativeBalance = data.cooperativeFinancialSummary
+    ? parseMoney(data.cooperativeFinancialSummary.total_cooperative_balance)
+    : ledgerBalance;
   const profileMap = makeProfileMap(profiles);
+  const investmentMap = new Map((data.investmentApplications || []).map((investment) => [investment.id, investment]));
+  const loanMap = new Map((data.loanApplications || []).map((loan) => [loan.id, loan]));
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const monthStartText = monthStart.toISOString().slice(0, 10);
+  const monthEndText = monthEnd.toISOString().slice(0, 10);
+  const interestDueThisMonth = (data.interestPayoutSchedule || [])
+    .filter((row) => ['pending', 'processing', 'overdue'].includes(String(row.status || '').toLowerCase()))
+    .filter((row) => String(row.due_date || '') >= monthStartText && String(row.due_date || '') <= monthEndText)
+    .sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
+  const loanRepaymentsDueThisMonth = (data.loanRepaymentSchedule || [])
+    .filter((row) => ['pending', 'overdue'].includes(String(row.status || '').toLowerCase()))
+    .filter((row) => String(row.due_date || '') >= monthStartText && String(row.due_date || '') <= monthEndText)
+    .sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
   const activity: Array<{ id: string; member: string; action: string; amount?: unknown; created_at?: string | null }> = [
     ...profiles.map((profile) => ({
       id: `profile-${profile.user_id}`,
@@ -623,7 +1467,13 @@ function Overview({ data, totalPendingActions }: { data: AdminData; totalPending
         <StatCard label="Pending Loans" value={String(data.loanApplications.filter((loan) => loan.status === 'pending').length)} tone="red" />
         <StatCard label="Pending Investments" value={String(data.investmentApplications.filter((investment) => investment.status === 'pending').length)} tone="red" />
         <StatCard label="Pending Withdrawals" value={String((data.paymentSubmissions || []).filter((payment) => payment.payment_type === 'withdrawal' && payment.status === 'pending').length)} tone="red" />
-        <StatCard label="Cooperative Balance" value={formatCurrency(balance)} tone="green" />
+        <div className="admin-stat-card min-w-0 rounded-lg border border-[#8BC34A]/25 bg-[#8BC34A]/10 p-3 md:p-5">
+          <p className="admin-stat-label text-xs font-black uppercase tracking-widest text-white/40">Cooperative Balance</p>
+          <p className={`mt-3 min-w-0 break-words text-xl font-black leading-tight sm:text-2xl ${cooperativeBalance < 0 ? 'text-red-300' : 'text-[#8BC34A]'}`}>{formatLedgerCurrency(cooperativeBalance)}</p>
+          <Link href="/admin/financials" className="mt-3 inline-flex text-xs font-black text-[#D4AF37] transition hover:text-[#F5D06B]">
+            View full breakdown →
+          </Link>
+        </div>
         <StatCard
           label="Total Pending Actions"
           value={String(totalPendingActions)}
@@ -633,20 +1483,103 @@ function Overview({ data, totalPendingActions }: { data: AdminData; totalPending
         />
       </div>
 
+      <Panel title="Due This Month" icon={Bell}>
+        {interestDueThisMonth.length === 0 && loanRepaymentsDueThisMonth.length === 0 ? (
+          <div className="px-5 py-14 text-center text-sm font-semibold text-white/40">Nothing due this month.</div>
+        ) : (
+          <div className="grid gap-5 p-4 xl:grid-cols-2">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Interest Payouts Due</p>
+              {interestDueThisMonth.length === 0 ? (
+                <p className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm font-semibold text-white/40">No interest payouts due.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto rounded-lg border border-white/10">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="border-b border-white/10 text-xs uppercase tracking-widest text-white/35">
+                      <tr>
+                        <th className="px-3 py-3">Member</th>
+                        <th className="px-3 py-3">Plan</th>
+                        <th className="px-3 py-3 text-right">Amount</th>
+                        <th className="px-3 py-3">Due Date</th>
+                        <th className="px-3 py-3">Status</th>
+                        <th className="px-3 py-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {interestDueThisMonth.map((row) => {
+                        const member = profileMap.get(row.user_id);
+                        const investment = investmentMap.get(row.investment_application_id);
+                        return (
+                          <tr key={row.id}>
+                            <td className="px-3 py-3 font-black">{memberName(member)}</td>
+                            <td className="px-3 py-3 text-white/55">{investment?.plan_name || investment?.investment_type || 'Investment'}</td>
+                            <td className="px-3 py-3 text-right font-black text-[#D4AF37]">{formatLedgerCurrency(row.amount)}</td>
+                            <td className="px-3 py-3 text-white/55">{formatDate(row.due_date)}</td>
+                            <td className="px-3 py-3">{statusBadge(row.status)}</td>
+                            <td className="px-3 py-3">
+                              <ActionButton onClick={() => runAction('markInterestPaid', { id: row.id }, 'Interest payout marked as paid.')} disabled={saving !== ''}>
+                                Mark as Paid
+                              </ActionButton>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Loan Repayments Due</p>
+              {loanRepaymentsDueThisMonth.length === 0 ? (
+                <p className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm font-semibold text-white/40">No loan repayments due.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto rounded-lg border border-white/10">
+                  <table className="w-full min-w-[620px] text-left text-sm">
+                    <thead className="border-b border-white/10 text-xs uppercase tracking-widest text-white/35">
+                      <tr>
+                        <th className="px-3 py-3">Member</th>
+                        <th className="px-3 py-3">Loan</th>
+                        <th className="px-3 py-3 text-right">Amount Due</th>
+                        <th className="px-3 py-3">Due Date</th>
+                        <th className="px-3 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {loanRepaymentsDueThisMonth.map((row) => {
+                        const member = profileMap.get(row.user_id);
+                        const loan = loanMap.get(row.loan_application_id);
+                        return (
+                          <tr key={row.id}>
+                            <td className="px-3 py-3 font-black">{memberName(member)}</td>
+                            <td className="px-3 py-3 text-white/55">{loan?.loan_type || 'Loan'}</td>
+                            <td className="px-3 py-3 text-right font-black text-[#D4AF37]">{formatLedgerCurrency(row.total_due)}</td>
+                            <td className="px-3 py-3 text-white/55">{formatDate(row.due_date)}</td>
+                            <td className="px-3 py-3">{dueStatusBadge(row.status)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Panel>
+
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <Panel
           title="Recent Activity"
           icon={Receipt}
           action={
             visibleActivity.length > 0 && (
-              <div className="flex flex-col items-end gap-1">
+              <div>
                 <ActionButton onClick={clearRecentActivity} tone="neutral">
                   <X size={14} />
                   Clear
                 </ActionButton>
-                <p className="max-w-[180px] text-right text-[10px] font-semibold leading-4 text-white/35">
-                  Cleared items are still saved in Activity Log
-                </p>
               </div>
             )
           }
@@ -681,7 +1614,7 @@ function Overview({ data, totalPendingActions }: { data: AdminData; totalPending
             <Link href="/admin/loans" className="rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 px-4 py-3 text-sm font-black text-[#D4AF37]">Review Pending Loans</Link>
             <Link href="/admin/investments" className="rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 px-4 py-3 text-sm font-black text-[#D4AF37]">Review Pending Investments</Link>
             <Link href="/admin/withdrawals" className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">Process Withdrawals</Link>
-            <Link href="/admin/kyc" className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-300">Approve KYC</Link>
+            <Link href="/admin/kyc" className="rounded-lg border border-[#8BC34A]/25 bg-[#8BC34A]/10 px-4 py-3 text-sm font-black text-[#8BC34A]">Approve KYC</Link>
           </div>
         </Panel>
       </div>
@@ -1041,56 +1974,67 @@ function ApplicationDetail({
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [payment, setPayment] = useState('');
-  const [investmentApproval, setInvestmentApproval] = useState({
-    agreedReturnRate: app.agreed_return_rate ? String(app.agreed_return_rate) : '',
-    startDate: app.start_date ? String(app.start_date).slice(0, 10) : new Date().toISOString().slice(0, 10),
-    maturityDate: app.maturity_date ? String(app.maturity_date).slice(0, 10) : '',
-    totalReturnAmount: app.total_return_amount ? String(app.total_return_amount) : '',
-  });
   const member = makeProfileMap(data.profiles).get(app.user_id);
   const repayments = data.transactions.filter((transaction) => transaction.loan_id === app.id && transaction.type === 'loan_repayment');
   const repaid = repayments.reduce((sum, transaction) => sum + parseMoney(transaction.amount), 0);
   const principal = parseMoney(applicationAmount(app));
   const remaining = Math.max(0, principal - repaid);
-  const investmentApproveDisabled =
-    kind === 'investment' &&
-    (!investmentApproval.startDate ||
-      !investmentApproval.maturityDate ||
-      parseMoney(investmentApproval.agreedReturnRate) <= 0 ||
-      parseMoney(investmentApproval.totalReturnAmount) <= 0);
-
-  function updateInvestmentApproval(field: keyof typeof investmentApproval, value: string) {
-    setInvestmentApproval((current) => ({ ...current, [field]: value }));
-  }
 
   function approveApplication() {
     const action = kind === 'loan' ? 'loanStatus' : 'investmentStatus';
     const body =
       kind === 'investment'
-        ? { id: app.id, status: 'approved', ...investmentApproval }
+        ? { id: app.id, status: 'approved' }
         : { id: app.id, status: 'approved' };
 
     return runAction(action, body, 'Application approved.');
   }
 
   return (
-    <div className="fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-[80] overflow-hidden">
       <button type="button" aria-label="Close application panel" onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-[#0A0A0A] p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+      <aside className="absolute inset-y-0 right-0 h-dvh w-screen max-w-full overflow-x-hidden overflow-y-auto border-l border-white/10 bg-[#0A0A0A] p-4 shadow-2xl sm:w-full sm:max-w-2xl sm:p-5">
+        <div className="flex min-w-0 items-start justify-between gap-3 sm:gap-4">
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">{kind === 'loan' ? 'Loan Application' : 'Investment Application'}</p>
-            <h3 className="mt-1 text-2xl font-black">{applicationType(app, kind)}</h3>
-            <p className="mt-1 text-sm text-white/45">{memberName(member)} - {formatCurrency(applicationAmount(app))}</p>
+            <h3 className="mt-1 break-words text-2xl font-black">{applicationType(app, kind)}</h3>
+            <p className="mt-1 break-words text-sm text-white/45">{memberName(member)} - {formatCurrency(applicationAmount(app))}</p>
           </div>
-          <ActionButton onClick={onClose} tone="neutral"><X size={14} /></ActionButton>
+          <div className="shrink-0">
+            <ActionButton onClick={onClose} tone="neutral"><X size={14} /></ActionButton>
+          </div>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="mt-6 grid min-w-0 gap-4 sm:grid-cols-2">
+          {kind === 'investment' && (
+            <>
+              <div className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white/35">Amount Paid</p>
+                <p className="mt-2 break-all text-sm font-semibold text-white/80 sm:break-words">{formatCurrency(app.amount_paid)}</p>
+              </div>
+              <div className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white/35">Payment Reference</p>
+                <p className="mt-2 break-all text-sm font-semibold text-white/80 sm:break-words">{app.payment_reference || 'Not provided'}</p>
+              </div>
+              {app.proof_of_payment_url && (
+                <div className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-3 sm:col-span-2">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-white/35">Proof of Payment</p>
+                  <a
+                    href={app.proof_of_payment_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex rounded-lg border border-[#D4AF37]/25 bg-[#D4AF37]/10 px-3 py-2 text-xs font-black text-[#D4AF37] transition hover:bg-[#D4AF37]/15"
+                  >
+                    View Receipt
+                  </a>
+                </div>
+              )}
+            </>
+          )}
           {Object.entries(app).map(([key, value]) => (
-            <div key={key} className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
-              <p className="text-[11px] font-black uppercase tracking-widest text-white/35">{key.replace(/_/g, ' ')}</p>
-              <p className="mt-2 break-words text-sm font-semibold text-white/80">{applicationDetailValue(app, key, value)}</p>
+            <div key={key} className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+              <p className="break-words text-[11px] font-black uppercase tracking-widest text-white/35">{key.replace(/_/g, ' ')}</p>
+              <p className="mt-2 break-all text-sm font-semibold text-white/80 sm:break-words">{applicationDetailValue(app, key, value)}</p>
             </div>
           ))}
         </div>
@@ -1109,36 +2053,12 @@ function ApplicationDetail({
             <div className="grid gap-3 rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 p-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Investment Approval Terms</p>
-                <p className="mt-1 text-xs text-white/45">Set the agreed terms before approving this investment.</p>
+                <p className="mt-1 text-xs text-white/45">Approving will record the investment in the cooperative ledger and generate the interest payout schedule automatically.</p>
               </div>
-              <input
-                value={investmentApproval.agreedReturnRate}
-                onChange={(event) => updateInvestmentApproval('agreedReturnRate', event.target.value)}
-                placeholder="Agreed return rate (%)"
-                className="h-11 rounded-lg border border-white/10 bg-black/20 px-3 text-sm font-semibold outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50"
-              />
-              <input
-                value={investmentApproval.totalReturnAmount}
-                onChange={(event) => updateInvestmentApproval('totalReturnAmount', formatMoneyInput(event.target.value))}
-                placeholder="Total return amount"
-                className="h-11 rounded-lg border border-white/10 bg-black/20 px-3 text-sm font-semibold outline-none placeholder:text-white/25 focus:border-[#D4AF37]/50"
-              />
-              <input
-                type="date"
-                value={investmentApproval.startDate}
-                onChange={(event) => updateInvestmentApproval('startDate', event.target.value)}
-                className="h-11 rounded-lg border border-white/10 bg-black/20 px-3 text-sm font-semibold outline-none focus:border-[#D4AF37]/50"
-              />
-              <input
-                type="date"
-                value={investmentApproval.maturityDate}
-                onChange={(event) => updateInvestmentApproval('maturityDate', event.target.value)}
-                className="h-11 rounded-lg border border-white/10 bg-black/20 px-3 text-sm font-semibold outline-none focus:border-[#D4AF37]/50"
-              />
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-3">
-            <ActionButton onClick={approveApplication} disabled={saving !== '' || investmentApproveDisabled} tone="green">
+            <ActionButton onClick={approveApplication} disabled={saving !== ''} tone="green">
               Approve
             </ActionButton>
             <ActionButton onClick={() => runAction(kind === 'loan' ? 'loanStatus' : 'investmentStatus', { id: app.id, status: 'rejected', reason }, 'Application rejected.')} disabled={saving !== '' || !reason} tone="red">
@@ -1207,8 +2127,6 @@ function ApplicationTable({
   const [status, setStatus] = useState('Pending');
   const [selected, setSelected] = useState<any | null>(null);
   const [inlineReasons, setInlineReasons] = useState<Record<string, string>>({});
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [productForm, setProductForm] = useState({ name: '', interestRate: '', maxTenureMonths: '3', description: '', isActive: true });
   const profileMap = makeProfileMap(data.profiles);
   const rows = kind === 'loan' ? data.loanApplications : data.investmentApplications;
   const filtered = rows.filter((row) => {
@@ -1223,36 +2141,12 @@ function ApplicationTable({
     return statusMatch && haystack.includes(normalize(search));
   });
 
-  async function createProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const created = await runAction('createLoanProduct', productForm, 'Loan product created.');
-    if (created) {
-      setProductForm({ name: '', interestRate: '', maxTenureMonths: '3', description: '', isActive: true });
-      setShowProductForm(false);
-    }
-  }
-
   return (
     <>
       <Panel
         title={kind === 'loan' ? 'Loan Applications' : 'Investment Applications'}
         icon={kind === 'loan' ? FileText : TrendingUp}
-        action={kind === 'loan' && (
-          <ActionButton onClick={() => setShowProductForm((current) => !current)}>
-            <Plus size={14} />
-            New Loan Plan
-          </ActionButton>
-        )}
       >
-        {showProductForm && (
-          <form onSubmit={createProduct} className="grid gap-3 border-b border-white/10 p-4 lg:grid-cols-5">
-            <input required value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} placeholder="Product name" className="h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold outline-none placeholder:text-white/25" />
-            <input value={productForm.interestRate} onChange={(event) => setProductForm((current) => ({ ...current, interestRate: event.target.value }))} placeholder="Interest %/month" className="h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold outline-none placeholder:text-white/25" />
-            <input value={productForm.maxTenureMonths} onChange={(event) => setProductForm((current) => ({ ...current, maxTenureMonths: event.target.value }))} placeholder="Max tenure" className="h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold outline-none placeholder:text-white/25" />
-            <input value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} placeholder="Description" className="h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold outline-none placeholder:text-white/25" />
-            <ActionButton type="submit" disabled={saving !== ''}><Plus size={14} />Create</ActionButton>
-          </form>
-        )}
         <div className="grid gap-3 border-b border-white/10 p-4 lg:grid-cols-[1fr_auto]">
           <ToolbarInput value={search} onChange={setSearch} placeholder="Search applicant or application type" />
           <SelectControl value={status} onChange={setStatus} options={kind === 'loan' ? ['Pending', 'Approved', 'Rejected', 'All', 'Active', 'Disbursed'] : ['Pending', 'Approved', 'Rejected', 'All', 'Active', 'Matured']} />
@@ -1308,11 +2202,21 @@ function ApplicationTable({
 }
 
 function Loans(props: { data: AdminData; runAction: RunAction; saving: string }) {
-  return <ApplicationTable {...props} kind="loan" />;
+  return (
+    <div className="space-y-6">
+      <LoanProductsManager />
+      <ApplicationTable {...props} kind="loan" />
+    </div>
+  );
 }
 
 function Investments(props: { data: AdminData; runAction: RunAction; saving: string }) {
-  return <ApplicationTable {...props} kind="investment" />;
+  return (
+    <div className="space-y-6">
+      <InvestmentProductsManager />
+      <ApplicationTable {...props} kind="investment" />
+    </div>
+  );
 }
 
 function Withdrawals({
@@ -1410,7 +2314,6 @@ function Transactions({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ userId: '', type: 'manual_adjustment', amount: '', description: '' });
   const profileMap = makeProfileMap(data.profiles);
-  const complete = ['approved', 'success', 'transferred'];
   const filtered = data.transactions.filter((transaction) => {
     const member = profileMap.get(transaction.user_id);
     const typeMatch = type === 'All' || transaction.type === type;
@@ -1418,9 +2321,21 @@ function Transactions({
     const searchMatch = normalize(`${memberName(member)} ${transaction.reference} ${transaction.description}`).includes(normalize(search));
     return typeMatch && statusMatch && searchMatch;
   });
-  const deposits = filtered.filter((transaction) => transaction.type === 'deposit' && complete.includes(transaction.status)).reduce((sum, transaction) => sum + parseMoney(transaction.amount), 0);
-  const withdrawals = filtered.filter((transaction) => transaction.type === 'withdrawal' && complete.includes(transaction.status)).reduce((sum, transaction) => sum + parseMoney(transaction.amount), 0);
-  const fees = filtered.filter((transaction) => ['fee', 'registration_fee'].includes(transaction.type) && complete.includes(transaction.status)).reduce((sum, transaction) => sum + parseMoney(transaction.amount), 0);
+  const approvedPayments = (data.paymentSubmissions || []).filter((payment) => payment.status === 'approved');
+  const sumApprovedPayments = (paymentTypes: string[]) =>
+    approvedPayments
+      .filter((payment) => paymentTypes.includes(payment.payment_type))
+      .reduce((sum, payment) => sum + parseMoney(payment.amount), 0);
+  const deposits = sumApprovedPayments(['deposit']);
+  const withdrawals = sumApprovedPayments(['withdrawal']);
+  const amountReceived = sumApprovedPayments(['deposit', 'registration', 'loan_repayment', 'investment']);
+  const registrationAndLoanFees = sumApprovedPayments(['registration', 'loan_repayment']);
+  const interestLedger = data.interestLedger || [];
+  const hasInterestStatusColumn = interestLedger.some((entry) => Object.prototype.hasOwnProperty.call(entry, 'status'));
+  const interestPaidOut = interestLedger
+    .filter((entry) => !hasInterestStatusColumn || entry.status === 'paid')
+    .reduce((sum, entry) => sum + parseMoney(entry.amount), 0);
+  const netPosition = amountReceived - withdrawals - interestPaidOut;
   const uniqueTypes = Array.from(
     new Set([...TRANSACTION_TYPE_FILTERS, ...data.transactions.map((transaction) => transaction.type).filter(Boolean)])
   );
@@ -1440,11 +2355,13 @@ function Transactions({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total Deposits" value={formatCurrency(deposits)} tone="green" />
-        <StatCard label="Total Withdrawals" value={formatCurrency(withdrawals)} tone="red" />
-        <StatCard label="Fees Collected" value={formatCurrency(fees)} />
-        <StatCard label="Net Position" value={formatCurrency(deposits + fees - withdrawals)} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+        <StatCard label="TOTAL DEPOSITS" value={formatLedgerCurrency(deposits)} tone="green" />
+        <StatCard label="TOTAL WITHDRAWALS" value={formatLedgerCurrency(withdrawals)} tone="red" />
+        <StatCard label="AMOUNT RECEIVED" value={formatLedgerCurrency(amountReceived)} />
+        <StatCard label="REG. & LOAN FEES" value={formatLedgerCurrency(registrationAndLoanFees)} />
+        <StatCard label="INTEREST PAID OUT" value={formatLedgerCurrency(interestPaidOut)} />
+        <StatCard label="NET POSITION" value={formatLedgerCurrency(netPosition)} />
       </div>
       <Panel
         title="Complete Ledger"
@@ -1501,6 +2418,188 @@ function Transactions({
           </DataTable>
         )}
       </Panel>
+    </div>
+  );
+}
+
+function Financials({ data }: { data: AdminData }) {
+  const [classification, setClassification] = useState('All');
+  const [type, setType] = useState('All');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const profileMap = makeProfileMap(data.profiles);
+  const approvedPayments = (data.paymentSubmissions || []).filter((payment) => payment.status === 'approved');
+  const sumPayments = (paymentTypes: string[]) =>
+    approvedPayments
+      .filter((payment) => paymentTypes.includes(String(payment.payment_type || '').toLowerCase()))
+      .reduce((sum, payment) => sum + parseMoney(payment.amount), 0);
+
+  const memberDeposits = sumPayments(['deposit']);
+  const investmentPrincipalHeld = (data.investmentApplications || [])
+    .filter((investment) => investment.status === 'approved')
+    .reduce((sum, investment) => sum + parseMoney(investment.amount_paid || investment.lump_sum_amount || investment.amount), 0);
+  const withdrawalsPaid = sumPayments(['withdrawal']);
+  const netLiabilitiesFallback = memberDeposits + investmentPrincipalHeld - withdrawalsPaid;
+
+  const registrationFees = sumPayments(['registration']);
+  const loanRepayments = sumPayments(['loan_repayment']);
+  const interestPaid = (data.interestPayoutSchedule || [])
+    .filter((row) => normalize(row.status) === 'paid')
+    .reduce((sum, row) => sum + parseMoney(row.amount), 0);
+  const loansDisbursed = (data.loanApplications || [])
+    .filter((loan) => loan.status === 'approved')
+    .reduce((sum, loan) => sum + parseMoney(loan.approved_amount || loan.amount_approved || loan.amount_requested), 0);
+  const netAssetsFallback = registrationFees + loanRepayments - interestPaid - loansDisbursed;
+  const summary = data.cooperativeFinancialSummary || {};
+  const netLiabilities = summary.net_liabilities == null ? netLiabilitiesFallback : parseMoney(summary.net_liabilities);
+  const netAssets = summary.net_assets == null ? netAssetsFallback : parseMoney(summary.net_assets);
+  const totalBalance = summary.total_cooperative_balance == null ? netAssets - netLiabilities : parseMoney(summary.total_cooperative_balance);
+  const transactionTypes = Array.from(new Set([...FINANCIAL_TRANSACTION_TYPE_FILTERS, ...(data.cooperativeLedger || []).map((row) => row.transaction_type).filter(Boolean)]));
+  const filteredLedger = (data.cooperativeLedger || []).filter((row) => {
+    const rowClassification = ledgerClassification(row);
+    const createdAt = String(row.created_at || '').slice(0, 10);
+    const classificationMatch = classification === 'All' || rowClassification === classification;
+    const typeMatch = type === 'All' || row.transaction_type === type;
+    const fromMatch = !fromDate || createdAt >= fromDate;
+    const toMatch = !toDate || createdAt <= toDate;
+    return classificationMatch && typeMatch && fromMatch && toMatch;
+  });
+  const lastUpdated = new Date().toLocaleString('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-white/10 bg-white/[0.035] px-4 py-5">
+        <p className="text-xs font-black uppercase tracking-widest text-[#D4AF37]">Cooperative Financials</p>
+        <p className="mt-2 text-sm font-semibold text-white/45">Full financial position of Smart Save Cooperative</p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <FinancialSummaryCard
+          label="Total Liabilities"
+          value={formatLedgerCurrency(netLiabilities)}
+          subtext="Money owed back to members"
+          accent="#D97706"
+          valueClassName="text-amber-400"
+        />
+        <FinancialSummaryCard
+          label="Net Assets & Income"
+          value={formatLedgerCurrency(netAssets)}
+          subtext="Cooperative earnings and controlled funds"
+          accent="#16A34A"
+          valueClassName="text-emerald-400"
+        />
+        <FinancialSummaryCard
+          label="Total Cooperative Balance"
+          value={formatLedgerCurrency(totalBalance)}
+          subtext="Assets minus Liabilities"
+          accent="#C4922A"
+          valueClassName={totalBalance < 0 ? 'text-red-300' : 'text-[#8BC34A]'}
+        />
+      </div>
+
+      <Panel title="Liabilities - Obligations to Members" icon={Receipt}>
+        <FinancialBreakdownTable
+          rows={[
+            { label: 'Member Deposits', value: memberDeposits, note: 'Funds deposited by members - withdrawable on request' },
+            { label: 'Investment Principal Held', value: investmentPrincipalHeld, note: 'Investment capital - returned at end of term' },
+            { label: 'Withdrawals Paid Out', value: withdrawalsPaid, note: 'Already returned to members', deduction: true },
+          ]}
+          totalLabel="Net Liabilities"
+          totalValue={netLiabilitiesFallback}
+        />
+      </Panel>
+
+      <Panel title="Assets & Income - Cooperative Earnings" icon={BarChart3}>
+        <FinancialBreakdownTable
+          rows={[
+            { label: 'Registration Fees', value: registrationFees, note: 'One-time membership registration fees' },
+            { label: 'Loan Repayments Received', value: loanRepayments, note: 'Principal and interest returned by borrowers' },
+            { label: 'Interest Paid to Members', value: interestPaid, note: 'Quarterly interest paid out to investors', deduction: true },
+            { label: 'Loans Disbursed', value: loansDisbursed, note: 'Capital lent to members', deduction: true },
+          ]}
+          totalLabel="Net Assets"
+          totalValue={netAssetsFallback}
+        />
+      </Panel>
+
+      <Panel
+        title="Financial Transaction Log"
+        icon={Receipt}
+        action={
+          <ActionButton
+            onClick={() =>
+              downloadCsv('smart-save-financials.csv', [
+                ['Date', 'Type', 'Classification', 'Member', 'Amount', 'Direction'],
+                ...filteredLedger.map((row) => [
+                  row.created_at,
+                  row.transaction_type,
+                  ledgerClassification(row),
+                  memberName(profileMap.get(row.member_id)),
+                  row.amount,
+                  row.direction,
+                ]),
+              ])
+            }
+          >
+            <Download size={14} />Export CSV
+          </ActionButton>
+        }
+      >
+        <div className="grid gap-3 border-b border-white/10 p-4 md:grid-cols-4">
+          <SelectControl value={classification} onChange={setClassification} options={FINANCIAL_CLASSIFICATION_FILTERS} className="font-semibold" />
+          <SelectControl value={type} onChange={setType} options={transactionTypes} className="font-semibold" />
+          <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="admin-input h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white outline-none focus:border-[#D4AF37]/50" />
+          <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="admin-input h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white outline-none focus:border-[#D4AF37]/50" />
+        </div>
+        {filteredLedger.length === 0 ? (
+          <EmptyState label="No transactions recorded yet." />
+        ) : (
+          <DataTable minWidth={920}>
+            <thead className="border-b border-white/10 text-xs uppercase tracking-widest text-white/35">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Classification</th>
+                <th className="px-4 py-3">Member</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Direction</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {filteredLedger.map((row) => {
+                const rowClassification = ledgerClassification(row);
+                const isCredit = normalize(row.direction) === 'credit';
+                return (
+                  <tr key={row.id}>
+                    <td className="px-4 py-3 text-white/55">{formatDate(row.created_at)}</td>
+                    <td className="px-4 py-3 font-semibold text-white/70">{row.transaction_type || 'Not set'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black capitalize ${rowClassification === 'liability' ? 'border-amber-400/25 bg-amber-400/10 text-amber-300' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'}`}>
+                        {rowClassification}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-black">{memberName(profileMap.get(row.member_id))}</td>
+                    <td className="px-4 py-3 text-right font-black text-[#D4AF37]">{formatLedgerCurrency(row.amount)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-black ${isCredit ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-red-500/25 bg-red-500/10 text-red-300'}`}>
+                        {isCredit ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                        {isCredit ? 'In' : 'Out'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
+        )}
+      </Panel>
+
+      <p className="admin-muted text-xs font-semibold text-white/40">
+        All figures are based on admin-approved transactions. Last updated: {lastUpdated}
+      </p>
     </div>
   );
 }

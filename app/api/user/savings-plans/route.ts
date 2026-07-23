@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { createSupabaseAdminClient } from '@/lib/supabase-admin';
+import { SAVINGS_DURATION_MONTHS, SAVINGS_RETURN_RATE, getFixedInvestmentTier } from '@/lib/investment-config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,13 +67,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const planRates = { '6-month': 0.07, '12-month': 0.15 };
-    const planMonths = { '6-month': 6, '12-month': 12 };
+    const planMonths = { '6-month': 6, '12-month': SAVINGS_DURATION_MONTHS };
 
-    const annualRate = planRates[plan_type as keyof typeof planRates] || 0;
+    const tier = getFixedInvestmentTier(Number(principal_amount));
+    const configuredRate = tier?.monthlyRate || SAVINGS_RETURN_RATE;
     const months = planMonths[plan_type as keyof typeof planMonths] || 0;
 
-    if (!annualRate || !months) {
+    if (!months) {
       return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 });
     }
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           plan_type,
           principal_amount,
-          annual_rate: annualRate,
+          annual_rate: configuredRate,
           accrued_interest: 0,
           start_date: startDate.toISOString(),
           mature_date: matureDate.toISOString(),

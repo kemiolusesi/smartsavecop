@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@supabase/ssr';
-import LoansClient, { type LoanApplicationProfile, type LoanApplicationRow } from './LoansClient';
+import LoansClient, { type LoanApplicationProfile, type LoanApplicationRow, type LoanProductOption, type LoanRepaymentScheduleRow } from './LoansClient';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -50,13 +50,13 @@ export default async function LoansPage() {
 
   if (!session) {
     if (devBypassActive) {
-      return <LoansClient devBypassActive profile={createPreviewProfile()} />;
+      return <LoansClient devBypassActive profile={createPreviewProfile()} activeLoanProducts={[]} initialRepaymentSchedule={[]} />;
     }
 
     redirect('/signin?returnTo=/dashboard/loans');
   }
 
-  const [profileResult, loanApplicationsResult] = await Promise.all([
+  const [profileResult, loanApplicationsResult, productsResult, repaymentScheduleResult] = await Promise.all([
     supabase
     .from('profiles')
     .select('full_name,email,phone_number')
@@ -67,10 +67,23 @@ export default async function LoansPage() {
       .select('*')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('loan_products')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('loan_repayment_schedule')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('due_date', { ascending: true }),
   ]);
 
   if (profileResult.error) throw profileResult.error;
   if (loanApplicationsResult.error) throw loanApplicationsResult.error;
+  if (productsResult.error) throw productsResult.error;
+  if (repaymentScheduleResult.error) throw repaymentScheduleResult.error;
 
   return (
     <LoansClient
@@ -82,6 +95,8 @@ export default async function LoansPage() {
         phone: profileResult.data?.phone_number || '',
       }}
       initialLoanApplications={(loanApplicationsResult.data || []) as LoanApplicationRow[]}
+      activeLoanProducts={(productsResult.data || []) as LoanProductOption[]}
+      initialRepaymentSchedule={(repaymentScheduleResult.data || []) as LoanRepaymentScheduleRow[]}
     />
   );
 }

@@ -104,6 +104,11 @@ function createDevAdminData() {
         created_at: now,
       },
     ],
+    interestLedger: [],
+    interestPayoutSchedule: [],
+    loanRepaymentSchedule: [],
+    cooperativeLedger: [],
+    cooperativeFinancialSummary: null,
     loanApplications: [
       {
         id: 'loan-1',
@@ -149,14 +154,17 @@ function createDevAdminData() {
     ],
     adminNotes: [],
     auditLog: [],
+    identityRequests: [],
   };
 }
 
-async function selectSafe(supabase: any, table: string, query: string, orderColumn = 'created_at') {
-  const { data, error } = await supabase
-    .from(table)
-    .select(query)
-    .order(orderColumn, { ascending: false });
+async function selectSafe(supabase: any, table: string, query: string, orderColumn: string | null = 'created_at') {
+  let request = supabase.from(table).select(query);
+  if (orderColumn) {
+    request = request.order(orderColumn, { ascending: false });
+  }
+
+  const { data, error } = await request;
 
   if (error) {
     return [];
@@ -178,17 +186,27 @@ export async function GET() {
     profiles,
     transactions,
     paymentSubmissions,
+    interestLedger,
     loanApplications,
     investmentApplications,
     announcements,
+    interestPayoutSchedule,
+    loanRepaymentSchedule,
+    cooperativeLedger,
+    cooperativeFinancialSummaryRows,
   ] =
     await Promise.all([
       selectSafe(supabase, 'profiles', '*'),
       selectSafe(supabase, 'transactions', '*'),
       selectSafe(supabase, 'payment_submissions', '*'),
+      selectSafe(supabase, 'interest_ledger', '*'),
       selectSafe(supabase, 'loan_applications', '*'),
       selectSafe(supabase, 'investment_applications', '*'),
       selectSafe(supabase, 'announcements', '*'),
+      selectSafe(supabase, 'interest_payout_schedule', '*', 'due_date'),
+      selectSafe(supabase, 'loan_repayment_schedule', '*', 'due_date'),
+      selectSafe(supabase, 'cooperative_ledger', '*'),
+      selectSafe(supabase, 'cooperative_financial_summary', '*', null),
     ]);
 
 
@@ -198,6 +216,11 @@ export async function GET() {
     profiles,
     transactions,
     paymentSubmissions,
+    interestLedger,
+    interestPayoutSchedule,
+    loanRepaymentSchedule,
+    cooperativeLedger,
+    cooperativeFinancialSummary: cooperativeFinancialSummaryRows[0] || null,
     loanApplications,
     loanProducts: [],
     investmentApplications,

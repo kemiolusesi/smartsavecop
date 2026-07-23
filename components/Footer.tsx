@@ -112,21 +112,21 @@ export default function Footer() {
         </div>
 
         <div className="flex flex-col items-start justify-between gap-6 border-t border-brand-border pt-8 dark:border-white/[0.08] sm:flex-row sm:items-center">
-          <p className="text-xs text-zinc-400 dark:text-white/30">
+          <p className="text-xs text-brand-secondary dark:text-white/30">
             © {currentYear} Smart Save Cooperative. All rights reserved. Built with impact.
           </p>
 
           <div className="flex items-center gap-3 sm:gap-4">
             <a
               href="#top"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-brand-amber transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-[#D4AF37] dark:hover:border-white/20 dark:hover:text-white"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-brand-amber shadow-[0_2px_8px_rgba(139,109,56,0.08)] transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-[#D4AF37] dark:shadow-none dark:hover:border-white/20 dark:hover:text-white"
               aria-label="Back to top of page"
             >
               <ArrowUp size={13} />
             </a>
             <a
               href={`mailto:${CONTACT_EMAIL}`}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-zinc-500 transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:hover:border-white/20 dark:hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-brand-secondary shadow-[0_2px_8px_rgba(139,109,56,0.08)] transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:shadow-none dark:hover:border-white/20 dark:hover:text-white"
               aria-label="Email Smart Save Cooperative"
             >
               <Mail size={14} />
@@ -135,7 +135,7 @@ export default function Footer() {
               href={WHATSAPP_URL}
               target="_blank"
               rel="noreferrer"
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-zinc-500 transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:hover:border-white/20 dark:hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-brand-secondary shadow-[0_2px_8px_rgba(139,109,56,0.08)] transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:shadow-none dark:hover:border-white/20 dark:hover:text-white"
               aria-label="Chat with Smart Save Cooperative on WhatsApp"
             >
               <WhatsAppIcon size={15} />
@@ -144,7 +144,7 @@ export default function Footer() {
               href={INSTAGRAM_URL}
               target="_blank"
               rel="noreferrer"
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-zinc-500 transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:hover:border-white/20 dark:hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand-border bg-brand-ghost text-brand-secondary shadow-[0_2px_8px_rgba(139,109,56,0.08)] transition-all hover:border-brand-input hover:text-brand-ink dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-white/40 dark:shadow-none dark:hover:border-white/20 dark:hover:text-white"
               aria-label="Open Smart Save Cooperative Instagram"
             >
               <Instagram size={14} />
